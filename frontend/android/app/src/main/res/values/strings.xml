@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">NitinNova</string>
+    <string name="title_activity_main">NitinNova</string>
+    <string name="package_name">com.yourdomain.resumebuilder</string>
+    <string name="custom_url_scheme">com.yourdomain.resumebuilder</string>
+</resources>

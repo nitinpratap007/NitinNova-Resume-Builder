@@ -1,0 +1,156 @@
+export const templateSets = {
+  online: [
+    {
+      id: 'creative-gradient',
+      name: 'Creative Gradient',
+      description: 'Bold gradient header with modern section cards.',
+      palette: ['#3f51b5', '#ff4081', '#ffffff'],
+      style: 'gradient',
+      showImage: false,
+    },
+    {
+      id: 'modern-minimal',
+      name: 'Modern Minimal',
+      description: 'Light, clean layout with minimal style and crisp spacing.',
+      palette: ['#222831', '#eeeeee', '#00adb5'],
+      style: 'minimal',
+      showImage: false,
+    },
+    {
+      id: 'dark-glass',
+      name: 'Dark Glass',
+      description: 'A stylish dark theme with glass sections and strong typography.',
+      palette: ['#0b132b', '#1f4287', '#ffffff'],
+      style: 'dark',
+      showImage: false,
+    },
+    {
+      id: 'ats-clean',
+      name: 'ATS Clean',
+      description: 'ATS-friendly single column, no graphics. Perfect for job portals.',
+      palette: ['#1a1a2e', '#ffffff', '#e94560'],
+      style: 'ats',
+      showImage: false,
+    },
+    {
+      id: 'executive-pro',
+      name: 'Executive Pro',
+      description: 'Premium two-column layout for senior professionals and managers.',
+      palette: ['#1b2a4a', '#c9a227', '#f5f5f5'],
+      style: 'executive',
+      showImage: false,
+    },
+    {
+      id: 'tech-stack',
+      name: 'Tech Stack',
+      description: 'Developer-focused template with skills matrix and project cards.',
+      palette: ['#0d1117', '#58a6ff', '#c9d1d9'],
+      style: 'tech',
+      showImage: false,
+    },
+    {
+      id: 'creative-portfolio',
+      name: 'Creative Portfolio',
+      description: 'Vibrant portfolio-style with color blocks and photo support.',
+      palette: ['#6c5ce7', '#fd79a8', '#ffffff'],
+      style: 'portfolio',
+      showImage: true,
+    },
+    {
+      id: 'timeline-pro',
+      name: 'Timeline Pro',
+      description: 'Timeline-based experience layout with visual milestones.',
+      palette: ['#2d3436', '#00b894', '#ffffff'],
+      style: 'timeline',
+      showImage: false,
+    },
+  ],
+  offline: [
+    {
+      id: 'photo-profile',
+      name: 'Photo Profile',
+      description: 'Offline resume with a photo block and clean side panel.',
+      palette: ['#2e3d49', '#f2f2f2', '#fdd835'],
+      style: 'photo',
+      showImage: true,
+    },
+    {
+      id: 'classic-box',
+      name: 'Classic Box',
+      description: 'A trusted boxed layout with clear headings and strong structure.',
+      palette: ['#1f2937', '#ffffff', '#2563eb'],
+      style: 'classic',
+      showImage: false,
+    },
+    {
+      id: 'warm-side',
+      name: 'Warm Side',
+      description: 'Warm sidebar resume with bold name block and subtle accents.',
+      palette: ['#7c3aed', '#faf5ff', '#334155'],
+      style: 'side',
+      showImage: true,
+    },
+    {
+      id: 'bold-header',
+      name: 'Bold Header',
+      description: 'Eye-catching header with bold typography and accent line.',
+      palette: ['#e63946', '#1d3557', '#f1faee'],
+      style: 'boldheader',
+      showImage: false,
+    },
+    {
+      id: 'simple-ats',
+      name: 'Simple ATS',
+      description: 'Ultra-clean single column. Maximum ATS compatibility.',
+      palette: ['#000000', '#ffffff', '#555555'],
+      style: 'simpleats',
+      showImage: false,
+    },
+    {
+      id: 'professional-elegant',
+      name: 'Professional Elegant',
+      description: 'Elegant serif-inspired design with refined spacing.',
+      palette: ['#34495e', '#ecf0f1', '#2980b9'],
+      style: 'elegant',
+      showImage: false,
+    },
+    {
+      id: 'fresher-starter',
+      name: 'Fresher Starter',
+      description: 'Perfect for fresh graduates. Highlights education and skills.',
+      palette: ['#0097a7', '#e0f7fa', '#263238'],
+      style: 'fresher',
+      showImage: false,
+    },
+    {
+      id: 'double-column',
+      name: 'Double Column',
+      description: 'Two-column layout with sidebar for contact and skills.',
+      palette: ['#455a64', '#eceff1', '#ff6f00'],
+      style: 'doublecol',
+      showImage: false,
+    },
+  ]
+}
+
+export const fontOptions = [
+  { id: 'helvetica', name: 'Helvetica', value: "'Inter', 'Helvetica', sans-serif", pdfFont: 'Helvetica' },
+  { id: 'georgia', name: 'Georgia', value: "'Georgia', 'Times New Roman', serif", pdfFont: 'Times-Roman' },
+  { id: 'roboto', name: 'Roboto', value: "'Roboto', 'Arial', sans-serif", pdfFont: 'Helvetica' },
+  { id: 'arial', name: 'Arial', value: "'Arial', sans-serif", pdfFont: 'Helvetica' },
+  { id: 'courier', name: 'Courier New', value: "'Courier New', monospace", pdfFont: 'Courier' },
+  { id: 'outfit', name: 'Outfit', value: "'Outfit', sans-serif", pdfFont: 'Helvetica' },
+]
+
+export const fontSizePresets = [
+  { id: 'compact', name: 'Compact', bodySize: 10, headingSize: 14, nameSize: 22 },
+  { id: 'normal', name: 'Normal', bodySize: 11, headingSize: 16, nameSize: 26 },
+  { id: 'large', name: 'Large', bodySize: 12, headingSize: 18, nameSize: 30 },
+]
+
+export const coverLetterTemplates = [
+  { id: 'professional', name: 'Professional', description: 'Formal tone for corporate applications' },
+  { id: 'creative', name: 'Creative', description: 'Engaging tone for creative roles' },
+  { id: 'technical', name: 'Technical', description: 'Focused on skills and technical expertise' },
+  { id: 'entry-level', name: 'Entry Level', description: 'For freshers and career changers' },
+]

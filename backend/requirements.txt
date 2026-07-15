@@ -1,0 +1,17 @@
+Flask>=2.0
+reportlab
+pillow
+SQLAlchemy
+PyJWT
+flask-cors
+flask-limiter
+gunicorn
+werkzeugFlask>=2.0
+flask-cors
+SQLAlchemy
+python-dotenv
+openai
+reportlab
+PyJWT
+flask-limiter
+gunicorn
