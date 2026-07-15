@@ -1,0 +1,6 @@
+{
+  "appId": "com.yourdomain.resumebuilder",
+  "appName": "ResumeBuilder",
+  "webDir": "dist",
+  "bundledWebRuntime": false
+}
