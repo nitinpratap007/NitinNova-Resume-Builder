@@ -17,6 +17,7 @@ export default function Dashboard({ onLoadProfile }) {
   const [profiles, setProfiles] = useState([])
   const [cloudResumes, setCloudResumes] = useState([])
   const [tab, setTab] = useState('local')
+  const [cloudState, setCloudState] = useState('loading') // loading | ok | offline
 
   useEffect(() => {
     setProfiles(loadLocalProfiles())
@@ -26,8 +27,11 @@ export default function Dashboard({ onLoadProfile }) {
   async function fetchCloud() {
     try {
       const res = await API.get('/my/resumes')
-      if (res.data.ok) setCloudResumes(res.data.resumes)
-    } catch {}
+      if (res.data.ok) {
+        setCloudResumes(res.data.resumes)
+        setCloudState('ok')
+      } else setCloudState('offline')
+    } catch { setCloudState('offline') }
   }
 
   function createNew() {
@@ -144,8 +148,19 @@ export default function Dashboard({ onLoadProfile }) {
         <div style={{ display: 'grid', gap: '12px' }}>
           {cloudResumes.length === 0 && (
             <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
-              <p style={{ fontSize: '16px', marginBottom: '8px' }}>No cloud resumes</p>
-              <p style={{ fontSize: '13px' }}>Save a resume to the cloud to access it from any device.</p>
+              <p style={{ fontSize: '16px', marginBottom: '8px' }}>
+                {cloudState === 'loading' ? 'Checking cloud...' : cloudState === 'offline' ? 'Cloud sync unavailable' : 'No cloud resumes'}
+              </p>
+              <p style={{ fontSize: '13px' }}>
+                {cloudState === 'offline'
+                  ? 'The online backend is unreachable right now. Your resumes are safe in the Local tab — try again when you are online.'
+                  : 'Save a resume to the cloud to access it from any device.'}
+              </p>
+              {cloudState === 'offline' && (
+                <button className="btn btn-secondary" onClick={fetchCloud} style={{ marginTop: '12px', padding: '8px 16px', fontSize: '13px' }}>
+                  Retry
+                </button>
+              )}
             </div>
           )}
           {cloudResumes.map(r => (

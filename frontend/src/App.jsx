@@ -2,8 +2,6 @@ import React, { useState, useEffect } from 'react'
 import { App as CapApp } from '@capacitor/app'
 import { Toast } from '@capacitor/toast'
 import { Share } from '@capacitor/share'
-import { Filesystem } from '@capacitor/filesystem'
-import { Capacitor } from '@capacitor/core'
 import API from './api'
 import Form from './components/Form'
 import Preview from './components/Preview'
@@ -68,23 +66,29 @@ export default function App() {
   }, [])
 
   async function fetchAppSettings() {
+    // Local (admin-saved offline) settings apply first, server can override
+    try {
+      const local = JSON.parse(localStorage.getItem('nitinnova_admin_settings') || 'null')
+      if (local) applyAppSettings(local)
+    } catch {}
     try {
       const res = await API.get('/api/admin-settings')
-      if (res.data.ok) {
-        const s = res.data.settings
-        const updated = {
-          appName: s.appName || 'NitinNova',
-          appTagline: s.appTagline || 'CareerCraft by Nitin Pratap',
-          primaryColor: s.primaryColor || '#6366f1',
-          showShareButton: s.showShareButton !== 'false',
-        }
-        setAppSettings(updated)
-        document.title = `${updated.appName} - ${updated.appTagline}`
-        if (updated.primaryColor && updated.primaryColor !== '#6366f1') {
-          document.documentElement.style.setProperty('--primary', updated.primaryColor)
-        }
-      }
+      if (res.data.ok) applyAppSettings(res.data.settings)
     } catch {}
+  }
+
+  function applyAppSettings(s) {
+    const updated = {
+      appName: s.appName || 'NitinNova',
+      appTagline: s.appTagline || 'CareerCraft by Nitin Pratap',
+      primaryColor: s.primaryColor || '#6366f1',
+      showShareButton: s.showShareButton !== 'false' && s.showShareButton !== false,
+    }
+    setAppSettings(updated)
+    document.title = `${updated.appName} - ${updated.appTagline}`
+    if (updated.primaryColor && updated.primaryColor !== '#6366f1') {
+      document.documentElement.style.setProperty('--primary', updated.primaryColor)
+    }
   }
 
   useEffect(() => {
@@ -105,25 +109,11 @@ export default function App() {
     return () => { listener.then(l => l.remove()).catch(() => {}) }
   }, [route])
 
-  async function requestStoragePermission() {
-    if (Capacitor.isNativePlatform()) {
-      try {
-        const check = await Filesystem.checkPermissions()
-        if (check.publicStorage !== 'granted') {
-          await Filesystem.requestPermissions()
-        }
-      } catch (e) { console.warn('Storage permission error:', e) }
-    }
-  }
-
-  useEffect(() => {
-    if (initialToken) requestStoragePermission()
-  }, [])
-
+  // Storage access is handled silently at save time (Documents -> Cache -> Data
+  // fallback chain in pdfBuilder). No permission prompts at login or anywhere.
   function onAuth(a) {
     setAuth(a)
     setRoute('home')
-    requestStoragePermission()
   }
 
   async function handleShare() {
