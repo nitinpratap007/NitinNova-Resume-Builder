@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from 'react'
-import axios from 'axios'
-import { polishBullets } from '../localAI'
+import { polishBullets, organizeSkills } from '../localAI'
 import TemplateSelector from './TemplateSelector'
-import { templateSets, fontOptions, fontSizePresets } from '../templateData'
+import { templateSets, fontOptions, fontSizePresets, defaultSkillCategories, defaultSections } from '../templateData'
+import API from '../api'
 
 const DRAFT_KEY = 'resume_builder_draft'
 const PROFILES_KEY = 'nitinnova_resume_profiles'
 
 export default function Form({ onPolished, onSaved, onSavePdf, initialData }) {
   const [form, setForm] = useState({
-    name: '', email: '', phone: '', education: '', skills: '', projects: '',
+    name: '', headline: '', location: '', summary: '',
+    email: '', phone: '', education: '', skills: '', projects: '',
+    skillGroups: [],
     photo: '', photoShape: 'circle', bgColor: '#eef2ff',
     socialGithub: '', socialLinkedin: '', socialPortfolio: '', sections: []
   })
@@ -21,20 +23,31 @@ export default function Form({ onPolished, onSaved, onSavePdf, initialData }) {
   const [fontSizePreset, setFontSizePreset] = useState('normal')
   const [margins, setMargins] = useState(40)
   const [statusMessage, setStatusMessage] = useState('')
+  // true only after the draft-load effect has run — prevents the draft-save
+  // effect from overwriting the stored draft with the empty initial form
+  // (StrictMode double-invokes effects, which made drafts never load)
+  const [hydrated, setHydrated] = useState(false)
 
   useEffect(() => {
     if (initialData) {
       setForm(prev => ({
         ...prev,
-        name: initialData.name || '', email: initialData.email || '',
-        phone: initialData.phone || '', education: initialData.education || '',
+        name: initialData.name || '', headline: initialData.headline || '',
+        location: initialData.location || '', summary: initialData.summary || '',
+        email: initialData.email || '', phone: initialData.phone || '',
+        education: initialData.education || '',
         skills: initialData.skills || '', projects: initialData.projects || '',
+        skillGroups: initialData.skillGroups && initialData.skillGroups.length
+          ? initialData.skillGroups
+          : organizeSkills(initialData.skills || '', defaultSkillCategories),
         photo: initialData.photo || '', photoShape: initialData.photoShape || 'circle',
         bgColor: initialData.bgColor || '#eef2ff',
         socialGithub: initialData.socialGithub || '',
         socialLinkedin: initialData.socialLinkedin || '',
         socialPortfolio: initialData.socialPortfolio || '',
-        sections: initialData.sections || [],
+        sections: initialData.sections && initialData.sections.length
+          ? initialData.sections
+          : defaultSections.map((s, i) => ({ id: Date.now() + i, ...s })),
       }))
       if (initialData.template) setTemplate(initialData.template)
       if (initialData.templateMode) setTemplateMode(initialData.templateMode)
@@ -58,24 +71,46 @@ export default function Form({ onPolished, onSaved, onSavePdf, initialData }) {
   }, [templateMode])
 
   useEffect(() => {
-    if (initialData) return
-    try {
-      const draft = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null')
-      if (draft) {
-        setForm(draft.form || form)
-        setTemplate(draft.template || template)
-        setTemplateMode(draft.templateMode || templateMode)
-        if (draft.fontFamily) setFontFamily(draft.fontFamily)
-        if (draft.fontSizePreset) setFontSizePreset(draft.fontSizePreset)
-        if (draft.margins) setMargins(draft.margins)
-      }
-    } catch (err) { console.error('Load draft failed', err) }
+    if (!initialData) {
+      try {
+        const draft = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null')
+        if (draft && draft.form) {
+          const f = draft.form
+          // Migrate old drafts: seed skill groups + default sections once
+          if (!f.skillGroups) f.skillGroups = organizeSkills(f.skills || '', defaultSkillCategories)
+          if (!f.sections || !f.sections.length) {
+            f.sections = defaultSections.map((s, i) => ({ id: Date.now() + i, ...s }))
+          }
+          setForm(prev => ({ ...prev, ...f }))
+          setTemplate(draft.template || template)
+          setTemplateMode(draft.templateMode || templateMode)
+          if (draft.fontFamily) setFontFamily(draft.fontFamily)
+          if (draft.fontSizePreset) setFontSizePreset(draft.fontSizePreset)
+          if (draft.margins) setMargins(draft.margins)
+        } else {
+          // Fresh start: seed default sections so ATS structure is ready
+          setForm(prev => prev.sections.length ? prev : ({
+            ...prev,
+            sections: defaultSections.map((s, i) => ({ id: Date.now() + i, ...s })),
+          }))
+        }
+      } catch (err) { console.error('Load draft failed', err) }
+    }
+    setHydrated(true)
   }, [])
 
   useEffect(() => {
+    if (!hydrated) return
     const draft = { form, template, templateMode, fontFamily, fontSizePreset, margins }
     localStorage.setItem(DRAFT_KEY, JSON.stringify(draft))
-  }, [form, template, templateMode, fontFamily, fontSizePreset, margins])
+  }, [hydrated, form, template, templateMode, fontFamily, fontSizePreset, margins])
+
+  // Keep legacy `skills` string in sync with skill groups (used by AI polish + cover letter)
+  useEffect(() => {
+    const flat = (form.skillGroups || []).flatMap(g => g.items || []).join('\n')
+    if (flat !== (form.skills || '')) setForm(prev => ({ ...prev, skills: flat }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.skillGroups])
 
   useEffect(() => {
     const p = polishBullets(form)
@@ -83,6 +118,25 @@ export default function Form({ onPolished, onSaved, onSavePdf, initialData }) {
       sections: form.sections, bgColor: form.bgColor, photo: form.photo, photoShape: form.photoShape }
     onPolished(shaped)
   }, [form, template, templateMode, fontFamily, fontSizePreset, margins])
+
+  // Active accent: customized color wins, else the template's default accent
+  const activeAccent = (() => {
+    const t = [...(templateSets.online || []), ...(templateSets.offline || [])].find(x => x.id === template)
+    const customized = form.bgColor && form.bgColor.toLowerCase() !== '#eef2ff'
+    if (customized) return form.bgColor
+    return (t && t.ats && t.ats.accent) || (t && t.palette && t.palette[0]) || '#6366f1'
+  })()
+
+  function handleTemplateChange(id) {
+    setTemplate(id)
+    // keep the accent in sync with the newly selected template when untouched
+    const t = [...(templateSets.online || []), ...(templateSets.offline || [])].find(x => x.id === id)
+    const untouched = !form.bgColor || form.bgColor.toLowerCase() === '#eef2ff'
+    if (t && untouched) {
+      const accent = (t.ats && t.ats.accent) || (t.palette && t.palette[0])
+      if (accent) setForm(prev => ({ ...prev, bgColor: accent }))
+    }
+  }
 
   function change(e) {
     const { name, value, files } = e.target
@@ -128,6 +182,38 @@ export default function Form({ onPolished, onSaved, onSavePdf, initialData }) {
     setForm(prev => ({ ...prev, sections }))
   }
 
+  // ---- Skill categories -------------------------------------------------
+  function addSkillGroup() {
+    setForm(prev => ({
+      ...prev,
+      skillGroups: [...(prev.skillGroups || []), { id: Date.now(), category: 'New Category', items: [] }]
+    }))
+  }
+  function updateSkillGroup(id, patch) {
+    setForm(prev => ({
+      ...prev,
+      skillGroups: (prev.skillGroups || []).map(g => g.id === id ? { ...g, ...patch } : g)
+    }))
+  }
+  function removeSkillGroup(id) {
+    setForm(prev => ({ ...prev, skillGroups: (prev.skillGroups || []).filter(g => g.id !== id) }))
+  }
+  function moveSkillGroup(index, direction) {
+    const groups = [...(form.skillGroups || [])]
+    const ni = index + direction
+    if (ni < 0 || ni >= groups.length) return
+    ;[groups[index], groups[ni]] = [groups[ni], groups[index]]
+    setForm(prev => ({ ...prev, skillGroups: groups }))
+  }
+  function autoOrganizeSkills() {
+    const merged = (form.skillGroups || []).flatMap(g => g.items || [])
+    const source = merged.length ? merged.join('\n') : (form.skills || '')
+    if (!source.trim()) { setStatusMessage('Add skills first, then auto-organize.'); return }
+    const groups = organizeSkills(source, defaultSkillCategories)
+    setForm(prev => ({ ...prev, skillGroups: groups, skills: groups.flatMap(g => g.items).join('\n') }))
+    setStatusMessage('Skills organized into categories.')
+  }
+
   function saveAsProfile() {
     const profile = { id: Date.now(), ...form, template, templateMode, fontFamily, fontSizePreset, margins, savedAt: new Date().toISOString() }
     const existing = JSON.parse(localStorage.getItem(PROFILES_KEY) || '[]')
@@ -140,9 +226,12 @@ export default function Form({ onPolished, onSaved, onSavePdf, initialData }) {
     if (e) e.preventDefault()
     setLoading(true)
     try {
-      const res = await axios.post('http://localhost:5000/generate-resume', form)
-      const shaped = { ...res.data.polished, template, templateMode, fontFamily, fontSizePreset, margins,
-        sections: form.sections, bgColor: form.bgColor, photo: form.photo, photoShape: form.photoShape }
+      const res = await API.post('/generate-resume', form)
+      // form first so new ATS fields (headline, location, summary, skillGroups)
+      // survive even if the server response omits them
+      const shaped = { ...form, ...res.data.polished, template, templateMode, fontFamily, fontSizePreset, margins,
+        sections: form.sections, skillGroups: form.skillGroups,
+        bgColor: form.bgColor, photo: form.photo, photoShape: form.photoShape }
       onPolished(shaped)
       setStatusMessage('AI polished successfully.')
     } catch { generateOffline() } finally { setLoading(false) }
@@ -189,8 +278,8 @@ export default function Form({ onPolished, onSaved, onSavePdf, initialData }) {
             <button type="button" className={`btn btn-secondary ${templateMode === 'online' ? 'active' : ''}`}
               onClick={() => setTemplateMode('online')} style={{ padding: '8px 14px', fontSize: '13px' }}>Online</button>
           </div>
-          <TemplateSelector mode={templateMode} template={template} bgColor={form.bgColor}
-            onChange={setTemplate} onBgColorChange={color => setForm(prev => ({ ...prev, bgColor: color }))} />
+          <TemplateSelector mode={templateMode} template={template} bgColor={activeAccent}
+            onChange={handleTemplateChange} onBgColorChange={color => setForm(prev => ({ ...prev, bgColor: color }))} />
           <div className="form-group">
             <label>Font Family</label>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
@@ -227,7 +316,7 @@ export default function Form({ onPolished, onSaved, onSavePdf, initialData }) {
             </div>
             <div className="form-group">
               <label>Color Accent</label>
-              <input type="color" value={form.bgColor}
+              <input type="color" value={activeAccent}
                 onChange={e => setForm(prev => ({ ...prev, bgColor: e.target.value }))}
                 style={{ width: '100%', height: '44px', padding: 0, border: 'none', cursor: 'pointer' }} />
             </div>
@@ -238,7 +327,13 @@ export default function Form({ onPolished, onSaved, onSavePdf, initialData }) {
       {activeTab === 'personal' && (
         <div className="animate-fade-in" style={{ display: 'grid', gap: '14px' }}>
           <div className="form-group"><label>Full Name</label>
-            <input name="name" placeholder="e.g. Nitin Pratap" value={form.name} onChange={change} /></div>
+            <input name="name" placeholder="e.g. NITIN PRATAP" value={form.name} onChange={change} /></div>
+          <div className="form-group"><label>Headline / Title</label>
+            <input name="headline" placeholder="e.g. Software Developer | Full-Stack Developer | AI & Web Development"
+              value={form.headline} onChange={change} /></div>
+          <div className="form-group"><label>Location</label>
+            <input name="location" placeholder="e.g. Bareilly, Uttar Pradesh, India"
+              value={form.location} onChange={change} /></div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
             <div className="form-group"><label>Email</label>
               <input name="email" type="email" placeholder="e.g. nitin@gmail.com" value={form.email} onChange={change} /></div>
@@ -253,24 +348,71 @@ export default function Form({ onPolished, onSaved, onSavePdf, initialData }) {
             <div className="form-group"><label>Portfolio</label>
               <input name="socialPortfolio" placeholder="portfolio.com" value={form.socialPortfolio} onChange={change} /></div>
           </div>
+          <div className="form-group"><label>Professional Summary</label>
+            <textarea name="summary" rows={4}
+              placeholder={"Full-stack developer skilled in React, Node.js and Python...\n3-4 lines describing your strengths, focus areas and goals."}
+              value={form.summary} onChange={change} className="wide-textarea" /></div>
           <div className="form-group"><label>Education</label>
             <textarea name="education" rows={3} placeholder="B.Tech CS - GLA University (2020-2024)"
               value={form.education} onChange={change} /></div>
-          <div className="form-group"><label>Profile Photo</label>
+          <div className="form-group"><label>Profile Photo (creative templates only — hidden in ATS templates)</label>
             <input name="photo" type="file" accept="image/*" onChange={change} style={{ padding: '8px' }} /></div>
         </div>
       )}
 
       {activeTab === 'skills' && (
         <div className="animate-fade-in" style={{ display: 'grid', gap: '14px' }}>
-          <div className="form-group"><label>Skills (one per line)</label>
-            <textarea name="skills" rows={5}
-              placeholder={"React.js\nNode.js\nPython\nCapacitor"}
-              value={form.skills} onChange={change} className="wide-textarea" /></div>
-          <div className="form-group"><label>Projects / Experience (one per line)</label>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+            <h3 style={{ margin: 0, fontSize: '16px' }}>Technical Skills (categorized)</h3>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button type="button" className="btn btn-secondary" onClick={autoOrganizeSkills}
+                style={{ padding: '6px 12px', fontSize: '12px' }}>Auto-organize</button>
+              <button type="button" className="btn btn-primary" onClick={addSkillGroup}
+                style={{ padding: '6px 14px', fontSize: '13px' }}>+ Category</button>
+            </div>
+          </div>
+
+          <p style={{ color: 'var(--text-muted)', fontSize: '12px', margin: 0 }}>
+            One skill per line inside each category. "Auto-organize" sorts your skills into the right categories automatically.
+          </p>
+
+          {(form.skillGroups || []).length === 0 && (
+            <p style={{ color: 'var(--text-muted)', fontSize: '14px', textAlign: 'center', padding: '16px' }}>
+              No categories yet. Tap "+ Category" or "Auto-organize".
+            </p>
+          )}
+
+          {(form.skillGroups || []).map((group, idx) => (
+            <div key={group.id} className="section-card">
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <span style={{ color: 'var(--text-muted)', fontSize: '12px', minWidth: '32px' }}>#{idx + 1}</span>
+                <input type="text" placeholder="Category name" value={group.category}
+                  onChange={e => updateSkillGroup(group.id, { category: e.target.value })}
+                  style={{ flex: 1, minWidth: '120px', fontWeight: 600 }} />
+                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                  <button type="button" className="btn btn-secondary" onClick={() => moveSkillGroup(idx, -1)}
+                    disabled={idx === 0} style={{ padding: '5px 10px', fontSize: '12px' }}>Up</button>
+                  <button type="button" className="btn btn-secondary" onClick={() => moveSkillGroup(idx, 1)}
+                    disabled={idx === (form.skillGroups || []).length - 1} style={{ padding: '5px 10px', fontSize: '12px' }}>Down</button>
+                  <button type="button" className="btn btn-danger" onClick={() => removeSkillGroup(group.id)}
+                    style={{ padding: '5px 10px', fontSize: '12px' }}>Remove</button>
+                </div>
+              </div>
+              <textarea placeholder={'React.js\nNext.js\nTailwind CSS'}
+                value={(group.items || []).join('\n')}
+                onChange={e => updateSkillGroup(group.id, {
+                  items: e.target.value.split('\n').map(s => s.trim()).filter(Boolean)
+                })}
+                rows={3} className="wide-textarea" style={{ marginTop: '8px', fontSize: '13px' }} />
+            </div>
+          ))}
+
+          <div className="form-group" style={{ marginTop: '6px' }}>
+            <label>Projects / Experience (one per line)</label>
             <textarea name="projects" rows={6}
               placeholder={"NitinNova Resume Builder - React & Flask\nAutomated Android APK build pipeline"}
-              value={form.projects} onChange={change} className="wide-textarea" /></div>
+              value={form.projects} onChange={change} className="wide-textarea" />
+          </div>
         </div>
       )}
 

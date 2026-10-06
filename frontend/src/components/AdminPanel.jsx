@@ -2,6 +2,16 @@ import React, { useState, useEffect } from 'react'
 import API from '../api'
 
 const CUSTOM_SECTIONS_KEY = 'nitinnova_admin_sections'
+const LOCAL_FEEDBACK_KEY = 'nitinnova_local_feedbacks'
+const SETTINGS_KEY = 'nitinnova_admin_settings'
+
+function loadLocalFeedbacks() {
+  try { return JSON.parse(localStorage.getItem(LOCAL_FEEDBACK_KEY) || '[]') } catch { return [] }
+}
+const DELETED_KEY = 'nitinnova_deleted_feedbacks'
+function loadDeletedIds() {
+  try { return JSON.parse(localStorage.getItem(DELETED_KEY) || '[]') } catch { return [] }
+}
 
 export default function AdminPanel() {
   const [users, setUsers] = useState([])
@@ -27,6 +37,12 @@ export default function AdminPanel() {
       setCustomSections(sec ? JSON.parse(sec) : ['Education', 'Skills', 'Projects & Experience'])
     } catch { setCustomSections(['Education', 'Skills', 'Projects & Experience']) }
 
+    // Local (offline-saved) settings apply first
+    try {
+      const local = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null')
+      if (local) setSettings(prev => ({ ...prev, ...local }))
+    } catch {}
+
     try {
       const res = await API.get('/api/admin-settings')
       if (res.data.ok) {
@@ -43,10 +59,18 @@ export default function AdminPanel() {
       }
     } catch {}
 
+    // Feedbacks = server list + local (offline) list merged, minus deleted
+    let serverFeedbacks = []
     try {
       const res = await API.get('/feedbacks')
-      if (res.data.ok) setFeedbacks(res.data.feedbacks || [])
+      if (res.data.ok) serverFeedbacks = res.data.feedbacks || []
     } catch {}
+    const deleted = loadDeletedIds()
+    const localFeedbacks = loadLocalFeedbacks()
+    setFeedbacks([
+      ...localFeedbacks.filter(f => !deleted.includes(f.id)),
+      ...serverFeedbacks.filter(f => !deleted.includes(f.id)),
+    ])
 
     try {
       const res = await API.get('/my/resumes')
@@ -56,6 +80,19 @@ export default function AdminPanel() {
 
   async function deleteFeedback(id) {
     if (!window.confirm('Delete this feedback?')) return
+    // local feedback -> remove from local store
+    if (typeof id === 'string' && id.startsWith('local_')) {
+      const next = loadLocalFeedbacks().filter(f => f.id !== id)
+      localStorage.setItem(LOCAL_FEEDBACK_KEY, JSON.stringify(next))
+    }
+    // record deletion so server feedbacks stay hidden even though the
+    // backend has no DELETE endpoint (frontend-side deletion)
+    try {
+      const deleted = loadDeletedIds()
+      if (!deleted.includes(id)) deleted.push(id)
+      localStorage.setItem(DELETED_KEY, JSON.stringify(deleted))
+    } catch {}
+    try { await API.delete(`/feedbacks/${id}`) } catch {}
     setFeedbacks(prev => prev.filter(f => f.id !== id))
   }
 
@@ -77,12 +114,15 @@ export default function AdminPanel() {
 
   async function saveSettings() {
     setSaving(true)
+    // Always persist locally first so the change applies offline immediately
+    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)) } catch {}
+    let onServer = false
     try {
       await API.post('/api/admin-settings', settings)
-      alert('Settings saved to server!')
-    } catch {
-      alert('Saved locally (offline).')
-    } finally { setSaving(false) }
+      onServer = true
+    } catch {}
+    alert(onServer ? 'Settings saved to server + locally!' : 'Settings saved locally (server offline).')
+    setSaving(false)
   }
 
   return (
@@ -118,7 +158,9 @@ export default function AdminPanel() {
               {feedbacks.map(f => (
                 <div key={f.id} style={{ padding: '16px', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-color)', borderRadius: '12px', display: 'grid', gap: '8px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '12px', color: 'var(--primary)', fontWeight: 600 }}>User #{f.user_id}</span>
+                    <span style={{ fontSize: '12px', color: 'var(--primary)', fontWeight: 600 }}>
+                      {f.local ? 'Local user (offline)' : `User #${f.user_id}`}
+                    </span>
                     <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{f.created_at}</span>
                   </div>
                   <h4 style={{ margin: '4px 0', color: 'var(--text-primary)' }}>{f.subject}</h4>

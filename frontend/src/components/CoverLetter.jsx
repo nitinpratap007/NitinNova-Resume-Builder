@@ -1,11 +1,9 @@
 import React, { useState } from 'react'
-import { jsPDF } from 'jspdf'
-import { Capacitor } from '@capacitor/core'
-import { Filesystem, Directory } from '@capacitor/filesystem'
-import { Toast } from '@capacitor/toast'
 import { generateCoverLetter } from '../localAI'
 import { coverLetterTemplates } from '../templateData'
-import axios from 'axios'
+import { jsPDF } from 'jspdf'
+import { savePdfSilently } from '../pdfBuilder'
+import API from '../api'
 
 export default function CoverLetter({ formData }) {
   const [form, setForm] = useState({
@@ -30,7 +28,7 @@ export default function CoverLetter({ formData }) {
   async function generateOnline() {
     setLoading(true)
     try {
-      const res = await axios.post('http://localhost:5000/generate-cover-letter', {
+      const res = await API.post('/generate-cover-letter', {
         ...formData, ...form, jobDescription, style,
       })
       if (res.data.letter) setLetter(res.data.letter)
@@ -65,20 +63,9 @@ export default function CoverLetter({ formData }) {
 
       const name = (form.name || 'applicant').replace(/\s+/g, '_')
       const filename = `cover_letter_${name}.pdf`
-
-      if (Capacitor.isNativePlatform()) {
-        try {
-          const perm = await Filesystem.requestPermissions()
-          if (perm.publicStorage !== 'granted') { setSaveMsg('Permission denied — check Settings'); return }
-          const dataUri = doc.output('datauristring')
-          await Filesystem.writeFile({ path: filename, data: dataUri.split(',')[1], directory: Directory.Documents, recursive: true })
-          await Toast.show({ text: `Cover letter saved: ${filename}` })
-          setSaveMsg('PDF saved to Documents!')
-        } catch (e) { setSaveMsg('Save error: ' + e.message) }
-      } else {
-        doc.save(filename)
-        setSaveMsg('PDF downloaded!')
-      }
+      // Silent chain: Documents -> Cache -> Data -> browser download. No permission prompts.
+      const msg = await savePdfSilently(doc, filename)
+      setSaveMsg(msg)
     } catch (e) { setSaveMsg('Export failed: ' + e.message) }
   }
 

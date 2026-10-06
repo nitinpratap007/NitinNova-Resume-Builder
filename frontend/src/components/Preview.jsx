@@ -1,62 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react'
-import { jsPDF } from 'jspdf'
-import html2canvas from 'html2canvas'
-import { Capacitor } from '@capacitor/core'
-import { Filesystem, Directory } from '@capacitor/filesystem'
-import { Toast } from '@capacitor/toast'
-import { templateSets, fontOptions, fontSizePresets } from '../templateData'
-
-function getLayoutStyle(t) {
-  const all = templateSets
-  const found = [...(all.online || []), ...(all.offline || [])].find(x => x.id === t)
-  const s = (found && found.style) || 'ats'
-  if (['gradient', 'boldheader', 'dark', 'portfolio'].includes(s)) return 'gradient'
-  if (['photo', 'side', 'doublecol'].includes(s)) return 'sidebar'
-  if (['executive', 'elegant', 'classic', 'tech', 'timeline'].includes(s)) return 'professional'
-  return 'clean'
-}
-
-async function doExportPDF(el, savedId, setStatus) {
-  setStatus('')
-  try {
-    const canvas = await html2canvas(el, {
-      scale: 3, useCORS: true, allowTaint: true, backgroundColor: '#ffffff',
-      width: el.scrollWidth, height: el.scrollHeight, windowWidth: el.scrollWidth,
-    })
-    const imgData = canvas.toDataURL('image/png')
-    const pdfW = 612, pdfH = 792
-    const imgRatio = canvas.width / canvas.height
-    let w, h
-    if (imgRatio > pdfW / pdfH) { w = pdfW; h = pdfW / imgRatio }
-    else { h = pdfH; w = pdfH * imgRatio }
-    const doc = new jsPDF({ unit: 'pt', format: 'letter' })
-    const xOff = (pdfW - w) / 2
-    const yOff = (pdfH - h) / 2
-    doc.addImage(imgData, 'PNG', xOff, yOff, w, h)
-    const fn = savedId ? 'resume_' + savedId + '.pdf' : 'resume_' + Date.now() + '.pdf'
-
-    if (Capacitor.isNativePlatform()) {
-      const b64 = doc.output('datauristring').split(',')[1]
-      let saved = false
-      try { await Filesystem.writeFile({ path: fn, data: b64, directory: Directory.Documents, recursive: true }); saved = true } catch {}
-      if (!saved) try { await Filesystem.writeFile({ path: fn, data: b64, directory: Directory.Cache, recursive: true }); saved = true } catch {}
-      if (!saved) try { await Filesystem.writeFile({ path: fn, data: b64, directory: Directory.Data, recursive: true }); saved = true } catch {}
-      if (saved) {
-        await Toast.show({ text: 'Resume saved to Documents!' })
-        setStatus('Resume saved to phone Documents folder!')
-      } else {
-        doc.save(fn)
-        setStatus('PDF downloaded!')
-      }
-    } else {
-      doc.save(fn)
-      setStatus('PDF downloaded!')
-    }
-  } catch (e) {
-    console.error('PDF error:', e)
-    setStatus('Error: ' + (e.message || String(e)))
-  }
-}
+import { buildResumeLayout, PAGE_W } from '../resumeLayout'
+import { exportResumePdf } from '../pdfBuilder'
 
 export default function Preview({ polished, savedId, saveTrigger }) {
   const [saving, setSaving] = useState(false)
@@ -64,18 +8,18 @@ export default function Preview({ polished, savedId, saveTrigger }) {
   const previewRef = useRef(null)
 
   useEffect(() => {
-    if (saveTrigger > 0 && previewRef.current && polished) {
+    if (saveTrigger > 0 && polished) {
       setSaving(true)
-      doExportPDF(previewRef.current, savedId, setStatus).finally(() => setSaving(false))
+      exportResumePdf(polished, savedId).then(r => setStatus(r.message)).finally(() => setSaving(false))
     }
   }, [saveTrigger])
 
   const exportPDF = useCallback(async () => {
-    if (!previewRef.current) return
     setSaving(true)
-    await doExportPDF(previewRef.current, savedId, setStatus)
+    const r = await exportResumePdf(polished, savedId)
+    setStatus(r.message)
     setSaving(false)
-  }, [savedId])
+  }, [polished, savedId])
 
   if (!polished) {
     return (
@@ -85,36 +29,52 @@ export default function Preview({ polished, savedId, saveTrigger }) {
     )
   }
 
-  const p = polished
-  const tid = p.template || 'photo-profile'
-  const layout = getLayoutStyle(tid)
-  const accent = p.bgColor || '#6366f1'
-  const skills = (p.skills || '').split('\n').filter(Boolean)
-  const bullets = (p.bullets || []).filter(b => !b.startsWith('Technologies:'))
-  const fc = fontOptions.find(f => f.id === (p.fontFamily || 'helvetica')) || fontOptions[0]
-  const sz = fontSizePresets.find(s => s.id === (p.fontSizePreset || 'normal')) || fontSizePresets[1]
-  const nameSz = sz.nameSize || 26
-  const bodySz = sz.bodySize || 11
-  const headSz = sz.headingSize || 16
-  const shape = p.photoShape || 'circle'
+  const L = buildResumeLayout(polished)
+  const bodySz = L.sz.bodySize
+  const headSz = L.sz.headingSize
+  const nameSz = L.sz.nameSize
+  const m = L.margins
+  const center = L.align === 'center'
+  const fgOnBand = L.band ? (isLight(L.accent) ? '#0f172a' : '#ffffff') : null
 
-  const hdr = (c) => ({ color: '#0f172a', borderBottom: `2px solid ${c}`, paddingBottom: '6px', fontSize: `${headSz}px` })
-
-  function photoCSS(sz2) {
-    const br = shape === 'circle' ? '50%' : shape === 'rounded' ? '16px' : '6px'
-    return { width: sz2, height: sz2, borderRadius: br, objectFit: 'cover' }
+  // section heading style — matches pdfBuilder.sectionHeading exactly
+  const headingStyle = {
+    margin: '0 0 6px',
+    fontSize: `${headSz}px`,
+    fontWeight: 700,
+    color: '#0f172a',
+    textTransform: 'uppercase',
+    borderBottom: L.heading === 'rule' ? '1px solid #cbd5e1'
+      : L.heading === 'accent' ? `1.5px solid ${L.accent}` : 'none',
+    paddingBottom: '4px',
+    lineHeight: 1.3,
   }
 
-  const PAGE_W = 700
+  const Section = ({ title, children }) => (
+    <section style={{ marginTop: `${Math.round(bodySz * 1.4)}px` }}>
+      <h3 style={headingStyle}>{title}</h3>
+      {children}
+    </section>
+  )
+
+  const paraStyle = { color: '#1f2937', whiteSpace: 'pre-wrap', lineHeight: 1.5, margin: 0 }
 
   return (
     <div className="glass-card preview-panel animate-fade-in" style={{ display: 'grid', gap: '16px', width: '100%' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
         <h3 style={{ margin: 0 }}>Live Preview</h3>
-        <button className="btn btn-primary" onClick={exportPDF} disabled={saving}
-          style={{ padding: '8px 14px', fontSize: '13px' }}>
-          {saving ? 'Saving...' : 'Download PDF'}
-        </button>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <span style={{
+            fontSize: '11px', padding: '4px 10px', borderRadius: '100px', fontWeight: 700,
+            background: L.ats ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.15)',
+            color: L.ats ? '#6ee7b7' : '#fcd34d',
+            border: `1px solid ${L.ats ? 'rgba(16,185,129,0.35)' : 'rgba(245,158,11,0.35)'}`,
+          }}>{L.ats ? 'ATS SAFE' : 'CREATIVE'}</span>
+          <button className="btn btn-primary" onClick={exportPDF} disabled={saving}
+            style={{ padding: '8px 14px', fontSize: '13px' }}>
+            {saving ? 'Saving...' : 'Download PDF'}
+          </button>
+        </div>
       </div>
 
       {status && (
@@ -128,159 +88,110 @@ export default function Preview({ polished, savedId, saveTrigger }) {
 
       <div style={{ overflowX: 'auto', borderRadius: '12px' }}>
         <div ref={previewRef} style={{
-          background: '#fff', color: '#1e293b', width: PAGE_W + 'px', margin: '0 auto',
-          fontSize: `${bodySz}px`, lineHeight: '1.5', textAlign: 'left', fontFamily: fc.value,
-          boxShadow: '0 8px 30px rgba(0,0,0,0.12)', overflow: 'hidden'
+          background: '#fff', color: '#1f2937', width: PAGE_W + 'px', margin: '0 auto',
+          fontSize: `${bodySz}px`, lineHeight: 1.5, textAlign: 'left', fontFamily: L.fc.value,
+          boxShadow: '0 8px 30px rgba(0,0,0,0.12)', overflow: 'hidden',
         }}>
-          {layout === 'gradient' ? (
-            <div>
-              <div style={{ background: accent, color: '#fff', padding: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '20px' }}>
-                <div>
-                  <h1 style={{ margin: 0, fontSize: `${nameSz}px`, fontWeight: 800 }}>{p.name || 'Your Name'}</h1>
-                  <p style={{ margin: '6px 0 0', opacity: 0.9 }}>{p.email || ''} {p.phone ? `| ${p.phone}` : ''}</p>
-                  {(p.socialGithub || p.socialLinkedin || p.socialPortfolio) && (
-                    <div style={{ marginTop: '6px', display: 'flex', flexWrap: 'wrap', gap: '12px', fontSize: '12px', opacity: 0.85 }}>
-                      {p.socialGithub && <span>GitHub: {p.socialGithub}</span>}
-                      {p.socialLinkedin && <span>LinkedIn: {p.socialLinkedin}</span>}
-                      {p.socialPortfolio && <span>Web: {p.socialPortfolio}</span>}
-                    </div>
-                  )}
-                </div>
-                {p.photo && <img src={p.photo} alt="" style={{ ...photoCSS('80px'), border: '3px solid #fff', flexShrink: 0 }} />}
-              </div>
-              <div style={{ padding: '32px', display: 'grid', gap: '24px' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
-                  <div><h3 style={hdr(accent)}>Education</h3><p style={{ color: '#475569', whiteSpace: 'pre-wrap', marginTop: '8px' }}>{p.education || 'No details.'}</p></div>
-                  <div><h3 style={hdr(accent)}>Skills</h3>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '8px' }}>
-                      {skills.map((sk, i) => <span key={i} style={{ padding: '4px 10px', backgroundColor: `${accent}10`, border: `1px solid ${accent}30`, borderRadius: '100px', fontSize: '12px', color: accent, fontWeight: 500 }}>{sk}</span>)}
-                    </div>
+          {/* ---------- header ---------- */}
+          {L.band ? (
+            <div style={{
+              background: L.accent, color: fgOnBand,
+              padding: `${Math.round(m * 0.55)}px ${m}px`,
+              display: 'flex', alignItems: 'center', gap: '20px',
+            }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <h1 style={{ margin: 0, fontSize: `${nameSz}px`, fontWeight: 800, lineHeight: 1.2 }}>
+                  {L.nameDisplay}
+                </h1>
+                {L.headline && (
+                  <div style={{ fontSize: `${Math.round(bodySz * 1.1)}px`, fontWeight: 600, marginTop: '4px', opacity: 0.95 }}>
+                    {L.headline}
                   </div>
-                </div>
-                <div>
-                  <h3 style={hdr(accent)}>Experience & Projects</h3>
-                  <ul style={{ paddingLeft: '18px', marginTop: '10px', display: 'grid', gap: '8px' }}>
-                    {bullets.length > 0 ? bullets.map((b, i) => <li key={i} style={{ color: '#334155' }}>{b}</li>) : <li style={{ color: '#94a3b8', listStyleType: 'none' }}>{p.projects || 'No projects listed.'}</li>}
-                  </ul>
-                </div>
-                {p.sections && p.sections.map((sec, i) => (
-                  <div key={i}><h3 style={hdr(accent)}>{sec.title}</h3><p style={{ color: '#334155', whiteSpace: 'pre-wrap', marginTop: '8px' }}>{sec.content}</p></div>
-                ))}
-              </div>
-            </div>
-          ) : layout === 'sidebar' ? (
-            <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr' }}>
-              <div style={{ background: '#f8fafc', padding: '32px 20px', borderRight: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                {p.photo && <div style={{ textAlign: 'center' }}><img src={p.photo} alt="" style={{ ...photoCSS('96px'), border: `2px solid ${accent}` }} /></div>}
-                <div><h4 style={{ fontSize: '12px', fontWeight: 800, letterSpacing: '1px', color: accent, marginBottom: '8px' }}>CONTACT</h4>
-                  <div style={{ display: 'grid', gap: '6px', fontSize: '11px', color: '#475569', wordBreak: 'break-all' }}>
-                    <div>{p.email}</div>{p.phone && <div>{p.phone}</div>}
-                    {p.socialGithub && <div>GitHub: {p.socialGithub}</div>}
-                    {p.socialLinkedin && <div>LinkedIn: {p.socialLinkedin}</div>}
-                    {p.socialPortfolio && <div>Web: {p.socialPortfolio}</div>}
-                  </div>
-                </div>
-                <div><h4 style={{ fontSize: '12px', fontWeight: 800, letterSpacing: '1px', color: accent, marginBottom: '8px' }}>EDUCATION</h4>
-                  <p style={{ fontSize: '11px', color: '#475569', whiteSpace: 'pre-wrap' }}>{p.education || 'No details.'}</p>
-                </div>
-                <div><h4 style={{ fontSize: '12px', fontWeight: 800, letterSpacing: '1px', color: accent, marginBottom: '8px' }}>SKILLS</h4>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                    {skills.map((sk, i) => <span key={i} style={{ padding: '2px 8px', backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '4px', fontSize: '10px', color: '#334155' }}>{sk}</span>)}
-                  </div>
+                )}
+                <div style={{ marginTop: '6px', fontSize: `${bodySz}px`, opacity: 0.92, display: 'grid', gap: '2px' }}>
+                  {L.contact.map((c, i) => <div key={i}>{c}</div>)}
                 </div>
               </div>
-              <div style={{ padding: '32px' }}>
-                <h1 style={{ margin: 0, fontSize: `${nameSz}px`, fontWeight: 800, color: '#0f172a' }}>{p.name || 'Your Name'}</h1>
-                <div style={{ width: '40px', height: '4px', background: accent, marginTop: '12px', marginBottom: '28px' }}></div>
-                <div style={{ display: 'grid', gap: '24px' }}>
-                  <div><h3 style={{ color: '#0f172a', fontSize: `${headSz}px`, borderBottom: '1px solid #e2e8f0', paddingBottom: '6px' }}>Projects & Experience</h3>
-                    <ul style={{ paddingLeft: '18px', marginTop: '10px', display: 'grid', gap: '8px' }}>
-                      {bullets.length > 0 ? bullets.map((b, i) => <li key={i} style={{ color: '#334155' }}>{b}</li>) : <li style={{ color: '#94a3b8', listStyleType: 'none' }}>{p.projects || 'No projects.'}</li>}
-                    </ul>
-                  </div>
-                  {p.sections && p.sections.map((sec, i) => (
-                    <div key={i}><h3 style={{ color: '#0f172a', fontSize: `${headSz}px`, borderBottom: '1px solid #e2e8f0', paddingBottom: '6px' }}>{sec.title}</h3>
-                      <p style={{ color: '#334155', whiteSpace: 'pre-wrap', marginTop: '8px' }}>{sec.content}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          ) : layout === 'professional' ? (
-            <div style={{ padding: '32px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                <div>
-                  <h1 style={{ margin: 0, fontSize: `${nameSz}px`, color: '#0f172a', fontWeight: 700 }}>{p.name || 'Your Name'}</h1>
-                  <p style={{ margin: '6px 0 0', color: '#475569' }}>{p.email || ''} {p.phone ? `| ${p.phone}` : ''}</p>
-                  {(p.socialGithub || p.socialLinkedin || p.socialPortfolio) && (
-                    <div style={{ marginTop: '4px', display: 'flex', flexWrap: 'wrap', gap: '12px', fontSize: '12px', color: '#64748b' }}>
-                      {p.socialGithub && <span>GitHub: {p.socialGithub}</span>}
-                      {p.socialLinkedin && <span>LinkedIn: {p.socialLinkedin}</span>}
-                      {p.socialPortfolio && <span>Web: {p.socialPortfolio}</span>}
-                    </div>
-                  )}
-                </div>
-                {p.photo && <img src={p.photo} alt="" style={{ ...photoCSS('64px'), border: `2px solid ${accent}` }} />}
-              </div>
-              <div style={{ borderBottom: `2px solid ${accent}`, marginBottom: '24px' }} />
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '24px' }}>
-                <div><h3 style={hdr(accent)}>Education</h3><p style={{ color: '#334155', whiteSpace: 'pre-wrap', marginTop: '8px' }}>{p.education || 'No details.'}</p></div>
-                <div><h3 style={hdr(accent)}>Skills</h3>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '8px' }}>
-                    {skills.map((sk, i) => <span key={i} style={{ padding: '3px 8px', backgroundColor: '#f1f5f9', borderRadius: '4px', fontSize: '11px', color: '#334155' }}>{sk}</span>)}
-                  </div>
-                </div>
-              </div>
-              <div>
-                <h3 style={hdr(accent)}>Projects & Experience</h3>
-                <ul style={{ paddingLeft: '18px', marginTop: '10px', display: 'grid', gap: '8px' }}>
-                  {bullets.length > 0 ? bullets.map((b, i) => <li key={i} style={{ color: '#334155' }}>{b}</li>) : <li style={{ color: '#94a3b8', listStyleType: 'none' }}>{p.projects || 'No projects.'}</li>}
-                </ul>
-              </div>
-              {p.sections && p.sections.map((sec, i) => (
-                <div key={i} style={{ marginTop: '20px' }}><h3 style={hdr(accent)}>{sec.title}</h3><p style={{ color: '#334155', whiteSpace: 'pre-wrap', marginTop: '8px' }}>{sec.content}</p></div>
-              ))}
+              {L.photo && (
+                <img src={L.photo} alt="" style={{
+                  width: '76px', height: '76px', flexShrink: 0,
+                  borderRadius: L.photoShape === 'circle' ? '50%' : L.photoShape === 'rounded' ? '14px' : '4px',
+                  objectFit: 'cover', border: `2px solid ${fgOnBand}`,
+                }} />
+              )}
             </div>
           ) : (
-            <div style={{ padding: '40px' }}>
-              <div style={{ textAlign: 'center', marginBottom: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '20px' }}>
-                <div>
-                  <h1 style={{ margin: 0, fontSize: `${nameSz + 4}px`, color: '#0f172a', fontWeight: 700 }}>{p.name || 'Your Name'}</h1>
-                  <p style={{ margin: '8px 0 0', color: '#475569' }}>{p.email || ''} {p.phone ? `| ${p.phone}` : ''}</p>
-                  {(p.socialGithub || p.socialLinkedin || p.socialPortfolio) && (
-                    <div style={{ marginTop: '8px', display: 'flex', justifyContent: 'center', gap: '16px', fontSize: '12px', color: '#64748b' }}>
-                      {p.socialGithub && <span>GitHub: {p.socialGithub}</span>}
-                      {p.socialLinkedin && <span>LinkedIn: {p.socialLinkedin}</span>}
-                      {p.socialPortfolio && <span>Web: {p.socialPortfolio}</span>}
-                    </div>
-                  )}
+            <div style={{ padding: `${Math.round(m * 0.7)}px ${m}px 0`, textAlign: center ? 'center' : 'left' }}>
+              <h1 style={{ margin: 0, fontSize: `${nameSz}px`, fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>
+                {L.nameDisplay}
+              </h1>
+              {L.headline && (
+                <div style={{ fontSize: `${Math.round(bodySz * 1.1)}px`, fontWeight: 600, color: '#1f2937', marginTop: '4px' }}>
+                  {L.headline}
                 </div>
-                {p.photo && <img src={p.photo} alt="" style={{ ...photoCSS('70px'), border: '2px solid #e2e8f0', flexShrink: 0 }} />}
-              </div>
-              <div style={{ borderBottom: '2px solid #0f172a', marginBottom: '28px' }} />
-              <div style={{ display: 'grid', gap: '28px' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '28px' }}>
-                  <div><h3 style={{ color: '#0f172a', fontSize: `${headSz - 1}px`, fontWeight: 700, textTransform: 'uppercase' }}>Education</h3>
-                    <p style={{ color: '#334155', whiteSpace: 'pre-wrap', marginTop: '6px' }}>{p.education || 'No details.'}</p></div>
-                  <div><h3 style={{ color: '#0f172a', fontSize: `${headSz - 1}px`, fontWeight: 700, textTransform: 'uppercase' }}>Skills</h3>
-                    <p style={{ color: '#334155', whiteSpace: 'pre-wrap', marginTop: '6px' }}>{skills.join(' | ') || 'No skills.'}</p></div>
-                </div>
-                <div>
-                  <h3 style={{ color: '#0f172a', fontSize: `${headSz - 1}px`, fontWeight: 700, textTransform: 'uppercase', borderBottom: '1px solid #cbd5e1', paddingBottom: '4px' }}>Projects & Experience</h3>
-                  <ul style={{ paddingLeft: '18px', marginTop: '10px', display: 'grid', gap: '8px' }}>
-                    {bullets.length > 0 ? bullets.map((b, i) => <li key={i} style={{ color: '#334155' }}>{b}</li>) : <li style={{ color: '#94a3b8', listStyleType: 'none' }}>{p.projects || 'No projects.'}</li>}
-                  </ul>
-                </div>
-                {p.sections && p.sections.map((sec, i) => (
-                  <div key={i}><h3 style={{ color: '#0f172a', fontSize: `${headSz - 1}px`, fontWeight: 700, textTransform: 'uppercase', borderBottom: '1px solid #cbd5e1', paddingBottom: '4px' }}>{sec.title}</h3>
-                    <p style={{ color: '#334155', whiteSpace: 'pre-wrap', marginTop: '8px' }}>{sec.content}</p>
-                  </div>
-                ))}
+              )}
+              <div style={{ marginTop: '6px', fontSize: `${bodySz}px`, color: '#475569', display: 'grid', gap: '2px' }}>
+                {L.contact.map((c, i) => <div key={i}>{c}</div>)}
               </div>
             </div>
           )}
+
+          {/* ---------- body ---------- */}
+          <div style={{ padding: `${L.band ? Math.round(m * 0.4) : Math.round(bodySz * 1.2)}px ${m}px ${m}px` }}>
+            {L.summary && (
+              <Section title="Professional Summary">
+                <p style={paraStyle}>{L.summary}</p>
+              </Section>
+            )}
+
+            {L.skillLines.length > 0 && (
+              <Section title="Technical Skills">
+                <div style={{ display: 'grid', gap: '3px' }}>
+                  {L.skillLines.map((g, i) => (
+                    <div key={i} style={{ color: '#1f2937', lineHeight: 1.5 }}>
+                      {g.label && <strong style={{ color: '#0f172a' }}>{g.label}: </strong>}
+                      {g.items.join(', ')}
+                    </div>
+                  ))}
+                </div>
+              </Section>
+            )}
+
+            {L.projects.length > 0 && (
+              <Section title="Projects">
+                <div style={{ display: 'grid', gap: '4px' }}>
+                  {L.projects.map((pr, i) => (
+                    <div key={i} style={{ color: '#1f2937', lineHeight: 1.5, paddingLeft: '14px', textIndent: '-14px' }}>
+                      - <strong style={{ color: '#0f172a' }}>{pr.title}</strong>
+                      {pr.rest && <> - {pr.rest}</>}
+                    </div>
+                  ))}
+                </div>
+              </Section>
+            )}
+
+            {L.education && (
+              <Section title="Education">
+                <p style={paraStyle}>{L.education}</p>
+              </Section>
+            )}
+
+            {L.sections.map((sec, i) => (
+              <Section key={i} title={sec.title}>
+                <p style={paraStyle}>{sec.content}</p>
+              </Section>
+            ))}
+          </div>
         </div>
       </div>
     </div>
   )
+}
+
+function isLight(hex) {
+  const h = (hex || '').replace('#', '')
+  if (h.length < 6) return false
+  const n = parseInt(h.slice(0, 6), 16)
+  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.55
 }

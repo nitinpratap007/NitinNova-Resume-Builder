@@ -1,6 +1,12 @@
 import React, { useState } from 'react'
 import API from '../api'
 
+const LOCAL_FEEDBACK_KEY = 'nitinnova_local_feedbacks'
+
+function loadLocalFeedbacks() {
+  try { return JSON.parse(localStorage.getItem(LOCAL_FEEDBACK_KEY) || '[]') } catch { return [] }
+}
+
 export default function Feedback() {
   const [form, setForm] = useState({ subject: '', message: '' })
   const [status, setStatus] = useState('')
@@ -16,13 +22,34 @@ export default function Feedback() {
       return
     }
     setSending(true)
+    let delivered = false
     try {
       await API.post('/feedback', { subject: form.subject, message: form.message })
+      delivered = true
+    } catch { delivered = false }
+
+    if (delivered) {
       setStatus('Thanks for your feedback!')
-      setForm({ subject: '', message: '' })
-    } catch {
-      setStatus('Failed to send. Try again later.')
-    } finally { setSending(false) }
+    } else {
+      // Offline fallback: store locally so the admin panel still shows it on this device
+      try {
+        const list = loadLocalFeedbacks()
+        list.unshift({
+          id: 'local_' + Date.now(),
+          user_id: 0,
+          subject: form.subject,
+          message: form.message,
+          created_at: new Date().toLocaleString(),
+          local: true,
+        })
+        localStorage.setItem(LOCAL_FEEDBACK_KEY, JSON.stringify(list.slice(0, 200)))
+        setStatus('Feedback saved offline — it will appear in the admin panel.')
+      } catch {
+        setStatus('Failed to save feedback. Try again later.')
+      }
+    }
+    setForm({ subject: '', message: '' })
+    setSending(false)
   }
 
   return (

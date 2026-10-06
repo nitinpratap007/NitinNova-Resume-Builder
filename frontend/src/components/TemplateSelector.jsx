@@ -28,7 +28,9 @@ export default function TemplateSelector({ mode, template, bgColor, onChange, on
         gridTemplateColumns: 'repeat(auto-fill, minmax(155px, 1fr))',
         gap: 10,
       }}>
-        {templates.map(t => (
+        {templates.map(t => {
+          const isCreative = t.kind === 'creative'
+          return (
           <div
             key={t.id}
             onClick={() => onChange(t.id)}
@@ -47,20 +49,27 @@ export default function TemplateSelector({ mode, template, bgColor, onChange, on
               boxShadow: template === t.id ? `0 4px 16px ${bgColor || '#4f46e5'}30` : 'none',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px', flexWrap: 'wrap' }}>
               <span style={{ fontSize: '16px' }}>{STYLE_ICONS[t.style] || '📄'}</span>
               <strong style={{ fontSize: '13px' }}>{t.name}</strong>
+            </div>
+            <div style={{ display: 'flex', gap: 4, marginBottom: 6, flexWrap: 'wrap' }}>
+              <span style={{
+                padding: '2px 7px', borderRadius: 6, fontSize: '10px', fontWeight: 700,
+                background: isCreative ? 'rgba(245,158,11,0.15)' : 'rgba(16,185,129,0.15)',
+                color: isCreative ? '#fcd34d' : '#6ee7b7',
+                border: `1px solid ${isCreative ? 'rgba(245,158,11,0.35)' : 'rgba(16,185,129,0.35)'}`,
+              }}>{isCreative ? 'Creative' : 'ATS Safe'}</span>
+              {t.showImage && (
+                <span style={{
+                  padding: '2px 7px', borderRadius: 6, fontSize: '10px',
+                  background: 'rgba(14,165,233,0.15)', color: '#38bdf8'
+                }}>Photo</span>
+              )}
             </div>
             <p style={{ fontSize: '11px', margin: '4px 0', minHeight: 30, opacity: 0.7, lineHeight: '1.3' }}>
               {t.description}
             </p>
-            {t.showImage && (
-              <span style={{
-                display: 'inline-block', marginBottom: 6, padding: '2px 6px',
-                borderRadius: 6, background: 'rgba(14,165,233,0.15)',
-                color: '#38bdf8', fontSize: '10px'
-              }}>Photo</span>
-            )}
             <div style={{ display: 'flex', gap: 3, marginTop: 6 }}>
               {t.palette.map((color, i) => (
                 <span key={i} style={{
@@ -70,7 +79,8 @@ export default function TemplateSelector({ mode, template, bgColor, onChange, on
               ))}
             </div>
           </div>
-        ))}
+          )
+        })}
       </div>
 
       {selected && (
@@ -79,7 +89,10 @@ export default function TemplateSelector({ mode, template, bgColor, onChange, on
           background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-color)'
         }}>
           <label style={{ display: 'block', marginBottom: 8, fontWeight: 600, fontSize: '13px' }}>
-            Theme Color for: {selected.name}
+            Accent Color for: {selected.name}
+            {selected.kind !== 'creative' && (
+              <span style={{ fontWeight: 400, fontSize: '11px', opacity: 0.7 }}> — underlines &amp; accents only (ATS-safe, never a background)</span>
+            )}
           </label>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
             {selected.palette.map((color, i) => (

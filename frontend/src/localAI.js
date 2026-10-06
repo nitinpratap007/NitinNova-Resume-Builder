@@ -1,3 +1,58 @@
+// ---- ATS skill auto-organizer ---------------------------------------------
+// Maps a skill keyword to one of the default categories. First match wins,
+// so ordering matters (more specific rules first).
+const SKILL_RULES = [
+  ['AI & APIs', /^(openai|gpt|chatgpt|llm|langchain|hugging ?face|tensorflow|pytorch|keras|scikit|sklearn|machine learning|ml|deep learning|nlp|computer vision|generative ai|ai|ml api|gemini|claude|midjourney|stable diffusion|rag|prompt engineering|openai api|rest ?api|graphql api|api|apis)\b/i],
+  ['Mobile Development', /^(android|ios|flutter|react native|capacitor|ionic|kotlin|swift|jetpack|expo|mobile|dart)\b/i],
+  ['DevOps & Tools', /^(docker|kubernetes|k8s|aws|azure|gcp|google cloud|ci ?\/ ?cd|jenkins|github actions|gitlab|terraform|ansible|nginx|linux|ubuntu|git|devops|cloud|linux shell|bash|powershell|vitest|jest testing|webpack|vite|github|gitlab ci)\b/i],
+  ['Databases', /^(mysql|postgres|postgresql|mongodb|mongo|redis|sqlite|firebase|oracle|cassandra|dynamodb|mariadb|sql server|elasticsearch|database|databases|supabase|prisma|sql)\b/i],
+  ['Frontend', /^(react|next\.?js|vue|nuxt|angular|svelte|html|css|scss|sass|tailwind|bootstrap|redux|zustand|jquery|frontend|ui|ux|typescript|javascript|js|es6|dom|material ?ui|antd)\b/i],
+  ['Backend', /^(node|express|flask|django|fastapi|spring|spring boot|laravel|nest\.?js|ruby on rails|php|rest ?api|grpc|websocket|backend|server|microservice|oauth|jwt|graphql)\b/i],
+  ['Core Concepts', /^(dsa|data structures|algorithms|oop|object oriented|operating systems|dbms|system design|computer networks|security|testing|agile|scrum|solid|design patterns|problem solving|competitive programming)\b/i],
+  ['Languages', /^(python|java|c\+\+|c#|c |go|golang|rust|ruby|scala|kotlin|swift|perl|r |matlab|sql|javascript|typescript|php|html|css|shell|pascal|lua|dart)\b/i],
+]
+
+function matchCategory(skill) {
+  const s = String(skill).trim()
+  if (!s) return null
+  for (const [cat, re] of SKILL_RULES) {
+    if (re.test(s)) return cat
+  }
+  return 'Core Concepts'
+}
+
+// Organize a flat newline/comma separated skill string into
+// [{ id, category, items: [...] }]. Categories with 0 items are kept so the
+// user sees the full ATS structure and can fill it in.
+export function organizeSkills(skillsRaw, categories) {
+  const cats = (categories && categories.length) ? categories : defaultCats()
+  const tokens = String(skillsRaw || '')
+    .split(/[\n,;]+/)
+    .map(s => s.trim())
+    .filter(Boolean)
+
+  const groups = cats.map((c, i) => ({ id: Date.now() + i, category: c, items: [] }))
+  const index = {}
+  groups.forEach(g => { index[g.category] = g })
+
+  tokens.forEach(tok => {
+    const cat = matchCategory(tok)
+    let target = index[cat]
+    if (!target) {
+      target = { id: Date.now() + groups.length, category: cat, items: [] }
+      groups.push(target)
+      index[cat] = target
+    }
+    if (!target.items.some(x => x.toLowerCase() === tok.toLowerCase())) target.items.push(tok)
+  })
+
+  return groups
+}
+
+function defaultCats() {
+  return ['Languages', 'Frontend', 'Backend', 'Databases', 'AI & APIs', 'Mobile Development', 'DevOps & Tools', 'Core Concepts']
+}
+
 const ACTION_VERBS = [
   'Developed', 'Implemented', 'Designed', 'Architected', 'Built', 'Led',
   'Optimized', 'Automated', 'Integrated', 'Spearheaded', 'Streamlined',
@@ -51,9 +106,8 @@ export function polishBullets(data) {
     bullets.push('Technologies: ' + skills.join(', '))
   }
 
-  if (!bullets.length) {
-    bullets.push('Contributed to projects using listed skills.')
-  }
+  // NOTE: no placeholder bullet — fabricated content hurts ATS honesty.
+  // If there are no projects, the Projects section is simply hidden.
 
   return {
     ...data,
