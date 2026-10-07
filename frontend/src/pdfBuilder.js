@@ -3,6 +3,11 @@ import { Capacitor } from '@capacitor/core'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import { Toast } from '@capacitor/toast'
 import { buildResumeLayout, PDF_SCALE } from './resumeLayout'
+import { normalizeResumeData, safePdfFilename } from './resumeNormalize'
+
+// A4 page: 210mm × 297mm = 595.28 × 841.89 pt
+const PAGE_W = 595.28
+const PAGE_H = 841.89
 
 // ---- color helpers ---------------------------------------------------------
 function hexToRgb(hex) {
@@ -92,11 +97,18 @@ function layoutRich(doc, font, parts, width) {
 // =============================================================================
 // Build the resume PDF — real selectable text, ATS-parseable, multi-page safe.
 // =============================================================================
-export async function buildResumePdf(p) {
+export async function buildResumePdf(raw) {
+  // Normalize at the export boundary so corrupted/duplicated legacy data can
+  // never leak duplicated sections/items into the PDF.
+  const p = normalizeResumeData(raw)
   const L = buildResumeLayout(p)
-  const doc = new jsPDF({ unit: 'pt', format: 'letter' })
 
-  const pageW = 612, pageH = 792
+  // Wait for webfonts to finish loading so text metrics match the preview.
+  try { if (document && document.fonts && document.fonts.ready) await document.fonts.ready } catch {}
+
+  const doc = new jsPDF({ unit: 'pt', format: 'a4' })
+
+  const pageW = PAGE_W, pageH = PAGE_H
   const margin = Math.max(L.margins * PDF_SCALE, 18)
   const contentW = pageW - margin * 2
   const x = margin
@@ -151,6 +163,10 @@ export async function buildResumePdf(p) {
       doc.setFontSize(size)
       doc.setTextColor(...color)
       const words = para.split(/(\s+)/).filter(w => w !== '')
+      // NOTE: after flush() the accumulated string MUST NOT be re-assigned back
+      // into `line`. Doing so reintroduces the whole paragraph into the next
+      // physical line, so every following word pushes the (now too-wide) line
+      // again — the "text printed many times, each copy longer" corruption.
       let line = ''
       const flush = () => {
         ensure(lh)
@@ -160,8 +176,12 @@ export async function buildResumePdf(p) {
       }
       for (const w of words) {
         const test = line + w
-        if (doc.getTextWidth(test.trim()) > contentW - (opts.indent || 0) && line.trim()) flush()
-        line = test
+        if (line.trim() && doc.getTextWidth(test.trim()) > contentW - (opts.indent || 0)) {
+          flush()
+          line = w // restart the physical line with the word that overflowed
+        } else {
+          line = test
+        }
       }
       if (line.trim()) flush()
     })
@@ -334,9 +354,10 @@ export async function savePdfSilently(doc, filename) {
 export async function exportResumePdf(p, savedId) {
   try {
     const doc = await buildResumePdf(p)
-    const fn = (savedId ? 'resume_' + savedId : 'resume_' + Date.now()) + '.pdf'
+    // Meaningful, filesystem-safe filename (e.g. "NitinPratap_NitinNova_Resume.pdf").
+    const fn = safePdfFilename(p && p.name)
     const msg = await savePdfSilently(doc, fn)
-    return { ok: true, message: msg }
+    return { ok: true, message: msg, filename: fn }
   } catch (e) {
     console.error('PDF error:', e)
     return { ok: false, message: 'Error: ' + (e.message || String(e)) }

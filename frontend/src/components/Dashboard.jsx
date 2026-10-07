@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import API from '../api'
+import { exportResumePdf } from '../pdfBuilder'
 
 const PROFILES_KEY = 'nitinnova_resume_profiles'
 
@@ -71,14 +72,27 @@ export default function Dashboard({ onLoadProfile }) {
 
   async function downloadCloud(id) {
     try {
-      const res = await API.get(`/download/${id}`, { responseType: 'blob' })
-      const url = window.URL.createObjectURL(new Blob([res.data]))
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `resume_${id}.pdf`
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
+      // Fetch the full resume state, then render it with the SAME client-side
+      // pipeline as the live preview — no server-side (ReportLab) template.
+      const res = await API.get(`/resumes/${id}`)
+      const r = res.data.resume
+      const state = {
+        ...(r.polished || {}),
+        id: r.id,
+        name: r.name,
+        email: r.email,
+        education: r.education,
+        skills: r.skills,
+        projects: r.projects,
+        sections: r.sections,
+        template: r.template,
+        templateMode: r.templateMode,
+        bgColor: r.bgColor,
+        photoShape: r.photoShape,
+        photo: r.photo,
+      }
+      const pdf = await exportResumePdf(state, r.id)
+      alert(pdf.ok ? `Saved: ${pdf.filename || 'PDF'}` : pdf.message)
     } catch { alert('Download failed') }
   }
 

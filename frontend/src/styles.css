@@ -247,3 +247,34 @@ button.btn:disabled { opacity: 0.5; cursor: not-allowed; }
   .tab-btn { padding: 7px 10px; font-size: 11px; }
   button.btn { padding: 8px 12px; font-size: 13px; }
 }
+
+/* ---------------------------------------------------------------------------
+   Printable resume — used when the user prints the live preview (browser
+   print dialog). The primary Download PDF flow is client-side (jsPDF) and
+   already uses #resume-preview as its single source of truth.
+--------------------------------------------------------------------------- */
+.resume-section {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+@media print {
+  body { margin: 0; background: #fff !important; }
+  .sidebar, .sidebar-overlay, .mobile-menu-toggle, .form-panel,
+  .preview-panel > div:first-child, .grid-2col > div:first-child,
+  .main-content > .animate-fade-in > *:not(.grid-2col) {
+    display: none !important;
+  }
+  .grid-2col { display: block !important; }
+  .main-content { padding: 0 !important; }
+  .preview-panel {
+    box-shadow: none !important;
+    border: none !important;
+    background: #fff !important;
+  }
+  #resume-preview {
+    width: 210mm !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+  }
+}

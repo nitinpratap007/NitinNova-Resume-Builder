@@ -28,7 +28,9 @@ init_db()
 
 def create_token(user_id, is_admin=False):
     exp = datetime.utcnow() + timedelta(minutes=15)
-    payload = {'sub': user_id, 'admin': bool(is_admin), 'exp': exp}
+    # RFC 7519 requires "sub" to be a string; newer PyJWT (>= 2.10) rejects
+    # integer subjects, which silently broke every authenticated endpoint.
+    payload = {'sub': str(user_id), 'admin': bool(is_admin), 'exp': exp}
     return jwt.encode(payload, SECRET, algorithm='HS256')
 
 def create_refresh_token(user_id, minutes=60*24*7):
@@ -53,6 +55,18 @@ def decode_token(token):
     try:
         return jwt.decode(token, SECRET, algorithms=['HS256'])
     except Exception:
+        return None
+
+
+def subject_id(payload):
+    """Return the JWT subject ("sub") as an int — the DB user_id columns are
+    INTEGER. Works whether the token carries a string (RFC 7519) or legacy int
+    subject, so ownership checks keep comparing ints to ints."""
+    if not payload:
+        return None
+    try:
+        return int(payload.get('sub'))
+    except (TypeError, ValueError):
         return None
 
 def auth_required(f):
@@ -250,7 +264,7 @@ def admin_login():
 def create_invite():
     db = SessionLocal()
     token = secrets.token_urlsafe(16)
-    created_by = request.user.get('sub')
+    created_by = subject_id(request.user)
     inv = Invite(token=token, created_by=created_by, used_by=None, created_at=datetime.utcnow().isoformat())
     db.add(inv); db.commit(); db.refresh(inv); db.close()
     return jsonify({'ok': True, 'invite': token})
@@ -271,7 +285,7 @@ def list_invites():
 def create_referral():
     db = SessionLocal()
     token = secrets.token_urlsafe(16)
-    user_id = request.user.get('sub')
+    user_id = subject_id(request.user)
     r = Referral(user_id=user_id, token=token, created_at=datetime.utcnow().isoformat(), used_by=None, used_at=None)
     db.add(r); db.commit(); db.refresh(r); db.close()
     return jsonify({'ok': True, 'token': token})
@@ -279,7 +293,7 @@ def create_referral():
 @app.route('/referrals', methods=['GET'])
 @auth_required
 def list_referrals():
-    user_id = request.user.get('sub')
+    user_id = subject_id(request.user)
     db = SessionLocal()
     rows = db.query(Referral).filter(Referral.user_id == user_id).all()
     out = [{'id': r.id, 'token': r.token, 'created_at': r.created_at, 'used_by': r.used_by, 'used_at': r.used_at} for r in rows]
@@ -290,7 +304,7 @@ def list_referrals():
 @auth_required
 def submit_feedback():
     data = request.json or {}
-    user_id = request.user.get('sub')
+    user_id = subject_id(request.user)
     subject = data.get('subject', '')
     message = data.get('message', '')
     db = SessionLocal()
@@ -448,7 +462,7 @@ def set_admin_settings():
 @app.route('/my/resumes', methods=['GET'])
 @auth_required
 def my_resumes():
-    user_id = request.user.get('sub')
+    user_id = subject_id(request.user)
     db = SessionLocal()
     rows = db.query(Resume).filter(Resume.user_id == user_id).all()
     db.close()
@@ -456,10 +470,57 @@ def my_resumes():
     return jsonify({'ok': True, 'resumes': out})
 
 
+@app.route('/resumes/<int:resume_id>', methods=['GET'])
+@auth_required
+def get_resume(resume_id):
+    """Return a resume's full state so the client can render/download it with
+    the SAME frontend pipeline as the live preview (single source of truth).
+    No PDF generation happens server-side."""
+    user_id = subject_id(request.user)
+    db = SessionLocal()
+    r = db.query(Resume).filter(Resume.id == resume_id).first()
+    db.close()
+    if not r:
+        return jsonify({'ok': False, 'error': 'Not found'}), 404
+    if r.user_id is not None and r.user_id != user_id and not request.user.get('admin'):
+        return jsonify({'ok': False, 'error': 'Forbidden'}), 403
+
+    sections = []
+    try:
+        sections = json.loads(r.sections) if r.sections else []
+    except Exception:
+        sections = []
+
+    polished_values = {}
+    if r.polished:
+        try:
+            polished_values = json.loads(r.polished)
+            if isinstance(polished_values, str):
+                polished_values = json.loads(polished_values)
+        except Exception:
+            polished_values = {}
+
+    return jsonify({'ok': True, 'resume': {
+        'id': r.id,
+        'name': r.name or '',
+        'email': r.email or '',
+        'education': r.education or '',
+        'skills': r.skills or '',
+        'projects': r.projects or '',
+        'template': r.template or 'photo-profile',
+        'templateMode': r.template_mode or 'online',
+        'sections': sections,
+        'bgColor': r.bg_color or '#eef2ff',
+        'photoShape': r.photo_shape or 'circle',
+        'photo': r.photo or '',
+        'polished': polished_values,
+    }})
+
+
 @app.route('/resumes/<int:resume_id>', methods=['PUT'])
 @auth_required
 def update_resume(resume_id):
-    user_id = request.user.get('sub')
+    user_id = subject_id(request.user)
     data = request.json or {}
     db = SessionLocal()
     r = db.query(Resume).filter(Resume.id == resume_id).first()
@@ -489,7 +550,7 @@ def update_resume(resume_id):
 @app.route('/resumes/<int:resume_id>', methods=['DELETE'])
 @auth_required
 def delete_resume(resume_id):
-    user_id = request.user.get('sub')
+    user_id = subject_id(request.user)
     db = SessionLocal()
     r = db.query(Resume).filter(Resume.id == resume_id).first()
     if not r:
@@ -514,7 +575,7 @@ def save_resume():
             token = auth.split(' ',1)[1]
             decoded = decode_token(token)
             if decoded:
-                user_id = decoded.get('sub')
+                user_id = subject_id(decoded)
 
         polished_payload = data.get('polished')
         if isinstance(polished_payload, dict):
@@ -557,7 +618,7 @@ def download_resume(resume_id):
         data = decode_token(token)
         if not data:
             return jsonify({'ok': False, 'error': 'Invalid token'}), 401
-        if data.get('sub') != r.user_id and not data.get('admin'):
+        if subject_id(data) != r.user_id and not data.get('admin'):
             return jsonify({'ok': False, 'error': 'Forbidden'}), 403
 
     sections = []

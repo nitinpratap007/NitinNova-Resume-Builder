@@ -6,19 +6,28 @@ export default function Preview({ polished, savedId, saveTrigger }) {
   const [saving, setSaving] = useState(false)
   const [status, setStatus] = useState('')
   const previewRef = useRef(null)
+  const busyRef = useRef(false)
 
   useEffect(() => {
-    if (saveTrigger > 0 && polished) {
+    if (saveTrigger > 0 && polished && !busyRef.current) {
+      busyRef.current = true
       setSaving(true)
-      exportResumePdf(polished, savedId).then(r => setStatus(r.message)).finally(() => setSaving(false))
+      exportResumePdf(polished, savedId)
+        .then(r => setStatus(r.message))
+        .finally(() => { setSaving(false); busyRef.current = false })
     }
   }, [saveTrigger])
 
   const exportPDF = useCallback(async () => {
+    // Re-entry guard: double clicks / stacked triggers never run a second
+    // export while one is in flight (prevents duplicate/corrupted files).
+    if (busyRef.current) return
+    busyRef.current = true
     setSaving(true)
     const r = await exportResumePdf(polished, savedId)
     setStatus(r.message)
     setSaving(false)
+    busyRef.current = false
   }, [polished, savedId])
 
   if (!polished) {
@@ -51,7 +60,7 @@ export default function Preview({ polished, savedId, saveTrigger }) {
   }
 
   const Section = ({ title, children }) => (
-    <section style={{ marginTop: `${Math.round(bodySz * 1.4)}px` }}>
+    <section className="resume-section" style={{ marginTop: `${Math.round(bodySz * 1.4)}px` }}>
       <h3 style={headingStyle}>{title}</h3>
       {children}
     </section>
@@ -87,7 +96,7 @@ export default function Preview({ polished, savedId, saveTrigger }) {
       )}
 
       <div style={{ overflowX: 'auto', borderRadius: '12px' }}>
-        <div ref={previewRef} style={{
+        <div ref={previewRef} id="resume-preview" style={{
           background: '#fff', color: '#1f2937', width: PAGE_W + 'px', margin: '0 auto',
           fontSize: `${bodySz}px`, lineHeight: 1.5, textAlign: 'left', fontFamily: L.fc.value,
           boxShadow: '0 8px 30px rgba(0,0,0,0.12)', overflow: 'hidden',
