@@ -211,39 +211,50 @@ export async function buildResumePdf(raw) {
     const fg = onAccent(L.accent)
     // band padding mirrors preview: 0.55 * margin top/bottom
     const pad = margin * 0.55
-    let bandH = pad
-    bandH += nameSz * 1.3
-    if (L.headline) bandH += body * 1.45
-    bandH += L.contact.length * body * 1.45
-    bandH += pad
+    // estimate band height first (same metrics as before) so photoSize stays
+    // visually identical; the real height is recomputed wrap-aware below.
+    const estBand = pad + nameSz * 1.3 + (L.headline ? body * 1.45 : 0)
+      + L.contact.length * body * 1.45 + pad
 
     let photoData = ''
     let photoSize = 0
     if (L.photo) {
       photoData = await shapePhoto(L.photo, L.photoShape)
-      photoSize = Math.min(76, bandH - 20)
+      photoSize = Math.min(76, estBand - 20)
     }
+    const textW = photoData ? contentW - photoSize - 16 : contentW
+
+    // Wrap-aware band text: measure every row so long links / photos that force
+    // wraps grow the band instead of drawing text over the next row (WYSIWYG —
+    // the preview wraps the same lines with CSS).
+    const wrappedCount = (text, size, bold) => {
+      doc.setFont(font, bold ? 'bold' : 'normal')
+      doc.setFontSize(size)
+      return doc.splitTextToSize(String(text), textW).length
+    }
+    let bandH = pad
+    bandH += wrappedCount(L.nameDisplay, nameSz, true) * nameSz * 1.3
+    if (L.headline) bandH += wrappedCount(L.headline, body * 1.1, false) * body * 1.45
+    L.contact.forEach(c => { bandH += wrappedCount(c, body, false) * body * 1.45 })
+    bandH += pad
+
     doc.setFillColor(...hexToRgb(L.accent))
     doc.rect(0, 0, pageW, bandH, 'F')
 
     let ty = pad
-    const textW = photoData ? contentW - photoSize - 16 : contentW
-    doc.setFont(font, 'bold')
-    doc.setFontSize(nameSz)
-    doc.setTextColor(...fg)
-    doc.text(L.nameDisplay, x, ty + nameSz * 0.9, { maxWidth: textW })
-    ty += nameSz * 1.3
-    if (L.headline) {
-      doc.setFont(font, 'normal')
-      doc.setFontSize(body * 1.1)
-      doc.text(L.headline, x, ty + body * 0.85, { maxWidth: textW })
-      ty += body * 1.45
+    const wrapDraw = (text, size, bold, baselineFrac) => {
+      doc.setFont(font, bold ? 'bold' : 'normal')
+      doc.setFontSize(size)
+      doc.setTextColor(...fg)
+      doc.splitTextToSize(String(text), textW).forEach(wl => {
+        doc.text(wl, x, ty + size * baselineFrac)
+        ty += size * 1.45
+      })
     }
-    doc.setFontSize(body)
-    L.contact.forEach(line => {
-      doc.text(line, x, ty + body * 0.85, { maxWidth: textW })
-      ty += body * 1.45
-    })
+    wrapDraw(L.nameDisplay, nameSz, true, 0.9)
+    if (L.headline) wrapDraw(L.headline, body * 1.1, false, 0.85)
+    L.contact.forEach(line => wrapDraw(line, body, false, 0.85))
+
     if (photoData) {
       try { doc.addImage(photoData, 'PNG', pageW - margin - photoSize, (bandH - photoSize) / 2, photoSize, photoSize) } catch {}
     }

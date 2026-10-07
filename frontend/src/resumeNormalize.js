@@ -44,7 +44,11 @@ export function normalizeResumeData(data) {
   // 2) project lines — drop exact duplicates (accumulation artifact)
   d.projects = dedupeLines(d.projects).join('\n')
 
-  // 3) polished bullets — drop exact duplicates, drop empties
+  // 3) flat legacy skills string — same dedupe (older drafts can carry the
+  //    accumulation artifact here too; skillGroups are handled further down)
+  d.skills = dedupeLines(d.skills).join('\n')
+
+  // 4) polished bullets — drop exact duplicates, drop empties
   if (!Array.isArray(d.bullets)) d.bullets = []
   else {
     const seen = new Set()
