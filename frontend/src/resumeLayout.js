@@ -4,7 +4,7 @@ import { findTemplate, fontOptions, fontSizePresets } from './templateData'
 // Both the live preview (JSX) and the text-based PDF (jsPDF) consume this
 // layout object, so what you see is what ATS reads.
 export const PAGE_W = 700          // preview width in px
-export const PDF_SCALE = 612 / 700 // px (preview) -> pt (letter page)
+export const PDF_SCALE = 595.28 / 700 // px (preview) -> pt (A4 page width)
 
 export function buildResumeLayout(p) {
   const t = findTemplate(p.template || '')

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { polishBullets, organizeSkills } from '../localAI'
+import { normalizeResumeData } from '../resumeNormalize'
 import TemplateSelector from './TemplateSelector'
 import { templateSets, fontOptions, fontSizePresets, defaultSkillCategories, defaultSections } from '../templateData'
 import API from '../api'
@@ -30,23 +31,26 @@ export default function Form({ onPolished, onSaved, onSavePdf, initialData }) {
 
   useEffect(() => {
     if (initialData) {
+      // Normalize the loaded profile (dedupe sections/skill groups/items) so
+      // corrupted legacy data cannot produce duplicated preview/PDF content.
+      const nd = normalizeResumeData(initialData)
       setForm(prev => ({
         ...prev,
-        name: initialData.name || '', headline: initialData.headline || '',
-        location: initialData.location || '', summary: initialData.summary || '',
-        email: initialData.email || '', phone: initialData.phone || '',
-        education: initialData.education || '',
-        skills: initialData.skills || '', projects: initialData.projects || '',
-        skillGroups: initialData.skillGroups && initialData.skillGroups.length
-          ? initialData.skillGroups
-          : organizeSkills(initialData.skills || '', defaultSkillCategories),
-        photo: initialData.photo || '', photoShape: initialData.photoShape || 'circle',
-        bgColor: initialData.bgColor || '#eef2ff',
-        socialGithub: initialData.socialGithub || '',
-        socialLinkedin: initialData.socialLinkedin || '',
-        socialPortfolio: initialData.socialPortfolio || '',
-        sections: initialData.sections && initialData.sections.length
-          ? initialData.sections
+        name: nd.name || '', headline: nd.headline || '',
+        location: nd.location || '', summary: nd.summary || '',
+        email: nd.email || '', phone: nd.phone || '',
+        education: nd.education || '',
+        skills: nd.skills || '', projects: nd.projects || '',
+        skillGroups: nd.skillGroups && nd.skillGroups.length
+          ? nd.skillGroups
+          : organizeSkills(nd.skills || '', defaultSkillCategories),
+        photo: nd.photo || '', photoShape: nd.photoShape || 'circle',
+        bgColor: nd.bgColor || '#eef2ff',
+        socialGithub: nd.socialGithub || '',
+        socialLinkedin: nd.socialLinkedin || '',
+        socialPortfolio: nd.socialPortfolio || '',
+        sections: nd.sections && nd.sections.length
+          ? nd.sections
           : defaultSections.map((s, i) => ({ id: Date.now() + i, ...s })),
       }))
       if (initialData.template) setTemplate(initialData.template)
@@ -75,7 +79,9 @@ export default function Form({ onPolished, onSaved, onSavePdf, initialData }) {
       try {
         const draft = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null')
         if (draft && draft.form) {
-          const f = draft.form
+          // Normalize legacy draft data (dedupe sections/groups/items) BEFORE
+          // seeding defaults, so corrupted old drafts never duplicate content.
+          const f = normalizeResumeData(draft.form)
           // Migrate old drafts: seed skill groups + default sections once
           if (!f.skillGroups) f.skillGroups = organizeSkills(f.skills || '', defaultSkillCategories)
           if (!f.sections || !f.sections.length) {
