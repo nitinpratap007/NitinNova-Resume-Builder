@@ -83,7 +83,7 @@ export default function Form({ onPolished, onSaved, onSavePdf, initialData }) {
           // seeding defaults, so corrupted old drafts never duplicate content.
           const f = normalizeResumeData(draft.form)
           // Migrate old drafts: seed skill groups + default sections once
-          if (!f.skillGroups) f.skillGroups = organizeSkills(f.skills || '', defaultSkillCategories)
+          if (!f.skillGroups || !f.skillGroups.length) f.skillGroups = organizeSkills(f.skills || '', defaultSkillCategories)
           if (!f.sections || !f.sections.length) {
             f.sections = defaultSections.map((s, i) => ({ id: Date.now() + i, ...s }))
           }
