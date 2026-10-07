@@ -4,6 +4,8 @@ import { exportResumePdf } from '../pdfBuilder'
 
 const PROFILES_KEY = 'nitinnova_resume_profiles'
 
+const IS_ADMIN_BUILD = import.meta.env.VITE_ADMIN_BUILD === 'true'
+
 function loadLocalProfiles() {
   try {
     return JSON.parse(localStorage.getItem(PROFILES_KEY) || '[]')
@@ -20,11 +22,13 @@ export default function Dashboard({ onLoadProfile, isAdmin, onGoAuth }) {
   const [tab, setTab] = useState('local')
   const [cloudState, setCloudState] = useState('loading') // loading | ok | offline
 
+  const canAccessCloud = IS_ADMIN_BUILD && isAdmin
+
   useEffect(() => {
     setProfiles(loadLocalProfiles())
-    if (isAdmin) fetchCloud()
+    if (canAccessCloud) fetchCloud()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAdmin])
+  }, [canAccessCloud])
 
   async function fetchCloud() {
     try {
@@ -118,7 +122,7 @@ export default function Dashboard({ onLoadProfile, isAdmin, onGoAuth }) {
         >
           Local Profiles ({profiles.length})
         </button>
-        {isAdmin && (
+        {canAccessCloud && (
           <button
             type="button"
             className={`tab-btn ${tab === 'cloud' ? 'active' : ''}`}
@@ -167,7 +171,7 @@ export default function Dashboard({ onLoadProfile, isAdmin, onGoAuth }) {
 
       {tab === 'cloud' && (
         <div style={{ display: 'grid', gap: '12px' }}>
-          {!isAdmin && (
+          {!canAccessCloud && (
             <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
               <p style={{ fontSize: '16px', marginBottom: '8px' }}>Cloud resumes are admin-only</p>
               <p style={{ fontSize: '13px' }}>Sign in with the admin account to access cloud-saved resumes.</p>
@@ -178,7 +182,7 @@ export default function Dashboard({ onLoadProfile, isAdmin, onGoAuth }) {
               )}
             </div>
           )}
-          {isAdmin && cloudResumes.length === 0 && (
+          {canAccessCloud && cloudResumes.length === 0 && (
             <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
               <p style={{ fontSize: '16px', marginBottom: '8px' }}>
                 {cloudState === 'loading' ? 'Checking cloud...' : cloudState === 'auth' ? 'Admin session expired' : cloudState === 'offline' ? 'Cloud sync unavailable' : 'No cloud resumes'}
@@ -198,7 +202,7 @@ export default function Dashboard({ onLoadProfile, isAdmin, onGoAuth }) {
               )}
             </div>
           )}
-          {isAdmin && cloudResumes.map(r => (
+          {canAccessCloud && cloudResumes.map(r => (
             <div key={r.id} style={{
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
               padding: '16px', background: 'rgba(255,255,255,0.03)',

@@ -12,6 +12,7 @@ export default function Auth({ onAuth }) {
   const [form, setForm] = useState({ email: '', password: '' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
 
   function change(e) {
     setForm({ ...form, [e.target.name]: e.target.value })
@@ -73,7 +74,12 @@ export default function Auth({ onAuth }) {
           </div>
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label>Password</label>
-            <input name="password" type="password" placeholder="Enter admin password" value={form.password} onChange={change} />
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <input name="password" type={showPassword ? 'text' : 'password'} placeholder="Enter admin password" value={form.password} onChange={change} style={{ flex: 1 }} />
+              <button type="button" className="btn btn-secondary" onClick={() => setShowPassword(!showPassword)} style={{ padding: '10px 14px', fontSize: '14px', whiteSpace: 'nowrap', height: '44px', alignSelf: 'flex-end' }}>
+                {showPassword ? '🙈 Hide' : '👁️ Show'}
+              </button>
+            </div>
           </div>
 
           {error && (

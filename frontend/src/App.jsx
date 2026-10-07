@@ -59,6 +59,9 @@ export default function App() {
     showShareButton: true,
   })
 
+  // Build-time flag: only include admin features in admin.apk
+  const IS_ADMIN_BUILD = import.meta.env.VITE_ADMIN_BUILD === 'true'
+
   useEffect(() => { setSidebarOpen(false) }, [route])
 
   useEffect(() => {
@@ -183,7 +186,7 @@ export default function App() {
             onClick={() => navigate('developer')}>
             <span>{'\uD83D\uDC64'}</span> Developer
           </button>
-          {auth.is_admin && (
+          {IS_ADMIN_BUILD && auth.is_admin && (
             <button className={`nav-button ${route === 'admin' ? 'active' : ''}`}
               onClick={() => navigate('admin')}>
               <span>{'\uD83D\uDEE1\uFE0F'}</span> Admin Panel
@@ -194,16 +197,16 @@ export default function App() {
               <span>{'\uD83D\uDD17'}</span> Share App
             </button>
           )}
-          {auth.token ? (
+          {IS_ADMIN_BUILD && auth.token ? (
             <button className="nav-button logout-button" onClick={logout}>
               <span>{'\uD83D\uDEAA'}</span> Logout
             </button>
-          ) : (
+          ) : IS_ADMIN_BUILD && !auth.token ? (
             <button className={`nav-button ${route === 'auth' ? 'active' : ''}`}
               onClick={() => navigate('auth')}>
               <span>{'\uD83D\uDD11'}</span> Admin Login
             </button>
-          )}
+          ) : null}
         </nav>
       </aside>
 
@@ -225,13 +228,13 @@ export default function App() {
             </div>
           )}
           {route === 'dashboard' && (
-            <Dashboard onLoadProfile={handleLoadProfile} isAdmin={auth.is_admin} onGoAuth={() => navigate('auth')} />
+            <Dashboard onLoadProfile={handleLoadProfile} isAdmin={IS_ADMIN_BUILD && auth.is_admin} onGoAuth={() => navigate('auth')} />
           )}
           {route === 'cover-letter' && <CoverLetter formData={polished || {}} />}
-          {route === 'auth' && <Auth onAuth={onAuth} />}
+          {IS_ADMIN_BUILD && route === 'auth' && <Auth onAuth={onAuth} />}
           {route === 'developer' && <Developer />}
           {route === 'feedback' && <Feedback />}
-          {route === 'admin' && auth.token && auth.is_admin && <AdminPanel />}
+          {IS_ADMIN_BUILD && route === 'admin' && auth.token && auth.is_admin && <AdminPanel />}
         </div>
       </main>
     </div>
