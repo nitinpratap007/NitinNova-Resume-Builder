@@ -6,15 +6,15 @@ const DEV_KEY = 'nitinnova_developer_info'
 const DEFAULT_INFO = {
   name: 'Nitin Pratap',
   bio: 'Creator of NitinNova Resume Builder',
-  email: 'nitin.202410@gmail.com',
-  phone: '9761183207',
-  github: '',
+  email: 'pratapnitin242@gmail.com',
+  phone: '9458701550',
+  github: 'nitinpratap007',
   linkedin: '',
   instagram: '',
   youtube: '',
-  portfolio: 'https://nitinnova.com/',
+  portfolio: 'https://nitinpratap007.github.io/',
   projectName: 'NitinNova Resume Builder',
-  projectLink: 'https://github.com/nitinpratap',
+  projectLink: 'https://github.com/nitinpratap007/NitinNova-Resume-Builder',
 }
 
 export default function Developer() {
