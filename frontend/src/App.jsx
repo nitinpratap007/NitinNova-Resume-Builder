@@ -44,7 +44,7 @@ export default function App() {
   const initialToken = localStorage.getItem('token')
   const [polished, setPolished] = useState(null)
   const [savedId, setSavedId] = useState(null)
-  const [route, setRoute] = useState(initialToken ? 'home' : 'auth')
+  const [route, setRoute] = useState('home')
   const [auth, setAuth] = useState({
     token: initialToken,
     is_admin: localStorage.getItem('is_admin') === '1'
@@ -163,47 +163,45 @@ export default function App() {
         </div>
 
         <nav className="nav-links">
+          <button className={`nav-button ${route === 'home' ? 'active' : ''}`}
+            onClick={() => navigate('home')}>
+            <span>{'\uD83D\uDCDD'}</span> Resume Builder
+          </button>
+          <button className={`nav-button ${route === 'dashboard' ? 'active' : ''}`}
+            onClick={() => navigate('dashboard')}>
+            <span>{'\uD83D\uDCC2'}</span> My Resumes
+          </button>
+          <button className={`nav-button ${route === 'cover-letter' ? 'active' : ''}`}
+            onClick={() => navigate('cover-letter')}>
+            <span>{'\u2709\uFE0F'}</span> Cover Letter
+          </button>
+          <button className={`nav-button ${route === 'feedback' ? 'active' : ''}`}
+            onClick={() => navigate('feedback')}>
+            <span>{'\uD83D\uDCAC'}</span> Feedback
+          </button>
+          <button className={`nav-button ${route === 'developer' ? 'active' : ''}`}
+            onClick={() => navigate('developer')}>
+            <span>{'\uD83D\uDC64'}</span> Developer
+          </button>
+          {auth.is_admin && (
+            <button className={`nav-button ${route === 'admin' ? 'active' : ''}`}
+              onClick={() => navigate('admin')}>
+              <span>{'\uD83D\uDEE1\uFE0F'}</span> Admin Panel
+            </button>
+          )}
+          {appSettings.showShareButton && (
+            <button className="nav-button" onClick={handleShare}>
+              <span>{'\uD83D\uDD17'}</span> Share App
+            </button>
+          )}
           {auth.token ? (
-            <>
-              <button className={`nav-button ${route === 'home' ? 'active' : ''}`}
-                onClick={() => navigate('home')}>
-                <span>{'\uD83D\uDCDD'}</span> Resume Builder
-              </button>
-              <button className={`nav-button ${route === 'dashboard' ? 'active' : ''}`}
-                onClick={() => navigate('dashboard')}>
-                <span>{'\uD83D\uDCC2'}</span> My Resumes
-              </button>
-              <button className={`nav-button ${route === 'cover-letter' ? 'active' : ''}`}
-                onClick={() => navigate('cover-letter')}>
-                <span>{'\u2709\uFE0F'}</span> Cover Letter
-              </button>
-              <button className={`nav-button ${route === 'feedback' ? 'active' : ''}`}
-                onClick={() => navigate('feedback')}>
-                <span>{'\uD83D\uDCAC'}</span> Feedback
-              </button>
-              <button className={`nav-button ${route === 'developer' ? 'active' : ''}`}
-                onClick={() => navigate('developer')}>
-                <span>{'\uD83D\uDC64'}</span> Developer
-              </button>
-              {auth.is_admin && (
-                <button className={`nav-button ${route === 'admin' ? 'active' : ''}`}
-                  onClick={() => navigate('admin')}>
-                  <span>{'\uD83D\uDEE1\uFE0F'}</span> Admin Panel
-                </button>
-              )}
-              {appSettings.showShareButton && (
-                <button className="nav-button" onClick={handleShare}>
-                  <span>{'\uD83D\uDD17'}</span> Share App
-                </button>
-              )}
-              <button className="nav-button logout-button" onClick={logout}>
-                <span>{'\uD83D\uDEAA'}</span> Logout
-              </button>
-            </>
+            <button className="nav-button logout-button" onClick={logout}>
+              <span>{'\uD83D\uDEAA'}</span> Logout
+            </button>
           ) : (
             <button className={`nav-button ${route === 'auth' ? 'active' : ''}`}
               onClick={() => navigate('auth')}>
-              <span>{'\uD83D\uDD11'}</span> Sign In / Sign Up
+              <span>{'\uD83D\uDD11'}</span> Admin Login
             </button>
           )}
         </nav>
@@ -211,7 +209,7 @@ export default function App() {
 
       <main className="main-content">
         <div className="animate-fade-in">
-          {route === 'home' && auth.token && (
+          {route === 'home' && (
             <div className="grid-2col">
               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                 <Form
@@ -226,23 +224,14 @@ export default function App() {
               </div>
             </div>
           )}
-          {route === 'dashboard' && auth.token && (
-            <Dashboard onLoadProfile={handleLoadProfile} />
+          {route === 'dashboard' && (
+            <Dashboard onLoadProfile={handleLoadProfile} isAdmin={auth.is_admin} onGoAuth={() => navigate('auth')} />
           )}
-          {route === 'cover-letter' && auth.token && (
-            <CoverLetter formData={polished || {}} />
-          )}
+          {route === 'cover-letter' && <CoverLetter formData={polished || {}} />}
           {route === 'auth' && <Auth onAuth={onAuth} />}
-          {route === 'developer' && auth.token && <Developer />}
-          {route === 'feedback' && auth.token && <Feedback />}
+          {route === 'developer' && <Developer />}
+          {route === 'feedback' && <Feedback />}
           {route === 'admin' && auth.token && auth.is_admin && <AdminPanel />}
-          {route !== 'auth' && !auth.token && (
-            <div className="glass-card text-center" style={{ maxWidth: '500px', margin: '60px auto', textAlign: 'center' }}>
-              <h2>Authentication Required</h2>
-              <p style={{ marginBottom: '20px' }}>Please sign in to access NitinNova.</p>
-              <button className="btn btn-primary" onClick={() => navigate('auth')}>Go to Login</button>
-            </div>
-          )}
         </div>
       </main>
     </div>
