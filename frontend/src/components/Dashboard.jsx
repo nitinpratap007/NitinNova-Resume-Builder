@@ -14,7 +14,7 @@ function saveLocalProfiles(profiles) {
   localStorage.setItem(PROFILES_KEY, JSON.stringify(profiles))
 }
 
-export default function Dashboard({ onLoadProfile }) {
+export default function Dashboard({ onLoadProfile, isAdmin, onGoAuth }) {
   const [profiles, setProfiles] = useState([])
   const [cloudResumes, setCloudResumes] = useState([])
   const [tab, setTab] = useState('local')
@@ -22,8 +22,9 @@ export default function Dashboard({ onLoadProfile }) {
 
   useEffect(() => {
     setProfiles(loadLocalProfiles())
-    fetchCloud()
-  }, [])
+    if (isAdmin) fetchCloud()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin])
 
   async function fetchCloud() {
     try {
@@ -32,7 +33,11 @@ export default function Dashboard({ onLoadProfile }) {
         setCloudResumes(res.data.resumes)
         setCloudState('ok')
       } else setCloudState('offline')
-    } catch { setCloudState('offline') }
+    } catch (err) {
+      const status = err && err.response && err.response.status
+      // 401/403 = the admin JWT is missing or expired (15 min lifetime)
+      setCloudState(status === 401 || status === 403 ? 'auth' : 'offline')
+    }
   }
 
   function createNew() {
@@ -113,13 +118,15 @@ export default function Dashboard({ onLoadProfile }) {
         >
           Local Profiles ({profiles.length})
         </button>
-        <button
-          type="button"
-          className={`tab-btn ${tab === 'cloud' ? 'active' : ''}`}
-          onClick={() => setTab('cloud')}
-        >
-          Cloud ({cloudResumes.length})
-        </button>
+        {isAdmin && (
+          <button
+            type="button"
+            className={`tab-btn ${tab === 'cloud' ? 'active' : ''}`}
+            onClick={() => setTab('cloud')}
+          >
+            Cloud ({cloudResumes.length})
+          </button>
+        )}
       </div>
 
       {tab === 'local' && (
@@ -160,24 +167,38 @@ export default function Dashboard({ onLoadProfile }) {
 
       {tab === 'cloud' && (
         <div style={{ display: 'grid', gap: '12px' }}>
-          {cloudResumes.length === 0 && (
+          {!isAdmin && (
             <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
-              <p style={{ fontSize: '16px', marginBottom: '8px' }}>
-                {cloudState === 'loading' ? 'Checking cloud...' : cloudState === 'offline' ? 'Cloud sync unavailable' : 'No cloud resumes'}
-              </p>
-              <p style={{ fontSize: '13px' }}>
-                {cloudState === 'offline'
-                  ? 'The online backend is unreachable right now. Your resumes are safe in the Local tab — try again when you are online.'
-                  : 'Save a resume to the cloud to access it from any device.'}
-              </p>
-              {cloudState === 'offline' && (
-                <button className="btn btn-secondary" onClick={fetchCloud} style={{ marginTop: '12px', padding: '8px 16px', fontSize: '13px' }}>
-                  Retry
+              <p style={{ fontSize: '16px', marginBottom: '8px' }}>Cloud resumes are admin-only</p>
+              <p style={{ fontSize: '13px' }}>Sign in with the admin account to access cloud-saved resumes.</p>
+              {onGoAuth && (
+                <button className="btn btn-secondary" onClick={onGoAuth} style={{ marginTop: '12px', padding: '8px 16px', fontSize: '13px' }}>
+                  Admin Login
                 </button>
               )}
             </div>
           )}
-          {cloudResumes.map(r => (
+          {isAdmin && cloudResumes.length === 0 && (
+            <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
+              <p style={{ fontSize: '16px', marginBottom: '8px' }}>
+                {cloudState === 'loading' ? 'Checking cloud...' : cloudState === 'auth' ? 'Admin session expired' : cloudState === 'offline' ? 'Cloud sync unavailable' : 'No cloud resumes'}
+              </p>
+              <p style={{ fontSize: '13px' }}>
+                {cloudState === 'auth'
+                  ? 'Your admin session has expired (tokens last 15 minutes). Please log in again.'
+                  : cloudState === 'offline'
+                    ? 'The online backend is unreachable right now. Your resumes are safe in the Local tab — try again when you are online.'
+                    : 'Save a resume to the cloud to access it from any device.'}
+              </p>
+              {cloudState !== 'loading' && (
+                <button className="btn btn-secondary" onClick={cloudState === 'auth' && onGoAuth ? onGoAuth : fetchCloud}
+                  style={{ marginTop: '12px', padding: '8px 16px', fontSize: '13px' }}>
+                  {cloudState === 'auth' ? 'Admin Login' : 'Retry'}
+                </button>
+              )}
+            </div>
+          )}
+          {isAdmin && cloudResumes.map(r => (
             <div key={r.id} style={{
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
               padding: '16px', background: 'rgba(255,255,255,0.03)',
