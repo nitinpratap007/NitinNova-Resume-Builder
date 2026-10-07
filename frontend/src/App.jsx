@@ -123,7 +123,7 @@ export default function App() {
     try {
       await Share.share({
         title: 'NitinNova',
-        text: 'Check out NitinNova - CareerCraft by Nitin Pratap!',
+        text: 'Check out NitinNova - CareerCraft by Nitin Pratap!\n\n📱 Please share the parent .apk file for the full app experience.',
         dialogTitle: 'Share with friends',
       })
     } catch (e) { console.warn('Sharing failed', e) }

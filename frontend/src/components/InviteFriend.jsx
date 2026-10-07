@@ -39,7 +39,7 @@ export default function InviteFriend() {
 
   function getShareText(token) {
     const appLink = getAppLink(token)
-    return `Try NitinNova Resume Builder! Create beautiful resumes in minutes. ${appLink}${token ? `\nUse invite code: ${token}` : ''}`
+    return `Try NitinNova Resume Builder! Create beautiful resumes in minutes. ${appLink}${token ? `\nUse invite code: ${token}` : ''}\n\n📱 Please share the parent .apk file for the full app experience.`
   }
 
   function copyText(text) {

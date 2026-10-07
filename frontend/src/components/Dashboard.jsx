@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import API from '../api'
 import { exportResumePdf } from '../pdfBuilder'
+import ImportResume from './ImportResume'
 
 const PROFILES_KEY = 'nitinnova_resume_profiles'
 
@@ -21,6 +22,7 @@ export default function Dashboard({ onLoadProfile, isAdmin, onGoAuth }) {
   const [cloudResumes, setCloudResumes] = useState([])
   const [tab, setTab] = useState('local')
   const [cloudState, setCloudState] = useState('loading') // loading | ok | offline
+  const [showImport, setShowImport] = useState(false)
 
   const canAccessCloud = IS_ADMIN_BUILD && isAdmin
 
@@ -29,6 +31,26 @@ export default function Dashboard({ onLoadProfile, isAdmin, onGoAuth }) {
     if (canAccessCloud) fetchCloud()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canAccessCloud])
+
+  function handleImportedResume(resumeData) {
+    // Create a profile object from the imported data
+    const profile = {
+      ...resumeData,
+      id: Date.now(),
+      name: resumeData.name || 'Imported Resume',
+      savedAt: new Date().toISOString(),
+    }
+    // Save to local profiles
+    const existing = loadLocalProfiles()
+    saveLocalProfiles([profile, ...existing])
+    setProfiles([profile, ...profiles])
+    setShowImport(false)
+    onLoadProfile(profile)
+  }
+
+  function closeImport() {
+    setShowImport(false)
+  }
 
   async function fetchCloud() {
     try {
@@ -107,12 +129,23 @@ export default function Dashboard({ onLoadProfile, isAdmin, onGoAuth }) {
 
   return (
     <div className="glass-card animate-fade-in" style={{ display: 'grid', gap: '20px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-        <h2 style={{ margin: 0 }}>My Resumes</h2>
-        <button className="btn btn-primary" onClick={createNew} style={{ padding: '10px 20px' }}>
-          + New Resume
-        </button>
-      </div>
+      {showImport ? (
+        <ImportResume onImport={handleImportedResume} onCancel={closeImport} />
+      ) : (
+        <>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+            <h2 style={{ margin: 0 }}>My Resumes</h2>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <button className="btn btn-primary" onClick={createNew} style={{ padding: '10px 20px' }}>
+                + New Resume
+              </button>
+              <button className="btn btn-secondary" onClick={() => setShowImport(true)} style={{ padding: '10px 20px' }}>
+                📥 Import Resume
+              </button>
+            </div>
+          </div>
+        </>
+      )}
 
       <div className="tabs-header">
         <button
