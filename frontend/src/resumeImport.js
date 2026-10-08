@@ -354,6 +354,33 @@ function parseGeneric(lines, startIdx, sectionKey) {
   return { [sectionKey]: items, nextIdx: i }
 }
 
+// Helper to extract location from a line
+function extractLocation(line) {
+  const locPatterns = [
+    /^location[:\-]\s*(.+)$/i,
+    /^address[:\-]\s*(.+)$/i,
+    /^based in[:\-]\s*(.+)$/i,
+    /^city[:\-]\s*(.+)$/i,
+  ]
+  for (const pattern of locPatterns) {
+    const match = line.match(pattern)
+    if (match) return match[1].trim()
+  }
+  // If line looks like a location (city, state/country)
+  if (/^[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*,?\s+[A-Z]{2,}$/.test(line.trim())) {
+    return line.trim()
+  }
+  return ''
+}
+
+function extractHeadline(line) {
+  // Skip contact info lines
+  if (extractEmail(line) || extractPhone(line) || extractLocation(line)) return ''
+  // Skip lines that are just labels
+  if (/^(email|phone|location|address|github|linkedin|portfolio|github|linkedin)[:\-]/i.test(line)) return ''
+  return line.trim()
+}
+
 export function parseResumeText(rawText) {
   const lines = splitIntoLines(rawText)
   const result = {
@@ -394,6 +421,9 @@ export function parseResumeText(rawText) {
   let currentSection = null
   const sectionContent = {}
 
+  // Track if we've seen the name already
+  let nameFound = false
+
   while (i < lines.length) {
     const line = lines[i]
     const section = detectSection(line)
@@ -407,10 +437,29 @@ export function parseResumeText(rawText) {
 
     if (currentSection) {
       sectionContent[currentSection].push(line)
-    } else if (!result.name && line.length > 2) {
-      // Before first section, might be name/headline/location
-      if (!result.headline && line.length > 10) result.headline = line
-      else if (!result.location && /[A-Za-z\s,]+/.test(line)) result.location = line
+    } else {
+      // Before first section, extract name, headline, location
+      if (!nameFound && line.length > 1) {
+        // Check if this looks like a name (first non-empty line with 2-4 capitalized words)
+        if (!result.name && /^[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3}$/.test(line.trim())) {
+          result.name = line.trim()
+          nameFound = true
+        } else if (result.name && !nameFound) {
+          nameFound = true
+        }
+      }
+      
+      // Extract location from lines like "Location: New Delhi, India"
+      if (!result.location) {
+        const loc = extractLocation(line)
+        if (loc) result.location = loc
+      }
+      
+      // Extract headline (first substantial line after name that's not contact info)
+      if (!result.headline && line.length > 3) {
+        const hl = extractHeadline(line)
+        if (hl && hl !== result.name) result.headline = hl
+      }
     }
     i++
   }
