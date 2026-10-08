@@ -33,11 +33,38 @@ export default function Dashboard({ onLoadProfile, isAdmin, onGoAuth }) {
   }, [canAccessCloud])
 
   function handleImportedResume(resumeData) {
-    // Create a profile object from the imported data
+    // Map imported data to the exact structure Form expects
     const profile = {
-      ...resumeData,
       id: Date.now(),
       name: resumeData.name || 'Imported Resume',
+      headline: resumeData.headline || '',
+      location: resumeData.location || '',
+      summary: resumeData.summary || '',
+      email: resumeData.email || '',
+      phone: resumeData.phone || '',
+      education: resumeData.education || '',
+      skills: resumeData.skills || '',
+      projects: resumeData.projects || '',
+      skillGroups: resumeData.skillGroups && resumeData.skillGroups.length
+        ? resumeData.skillGroups
+        : [], // Form will auto-organize from skills string if empty
+      sections: (resumeData.sections || []).map(s => ({
+        id: s.id || Date.now() + Math.random(),
+        title: s.title || '',
+        content: s.content || '',
+      })),
+      photo: resumeData.photo || '',
+      photoShape: resumeData.photoShape || 'circle',
+      bgColor: resumeData.bgColor || '#eef2ff',
+      socialGithub: resumeData.socialGithub || '',
+      socialLinkedin: resumeData.socialLinkedin || '',
+      socialPortfolio: resumeData.socialPortfolio || '',
+      template: resumeData.template || 'modern-minimal',
+      templateMode: resumeData.templateMode || 'online',
+      fontFamily: resumeData.fontFamily || 'helvetica',
+      fontSizePreset: resumeData.fontSizePreset || 'normal',
+      margins: resumeData.margins || 40,
+      bullets: resumeData.bullets || [],
       savedAt: new Date().toISOString(),
     }
     // Save to local profiles
