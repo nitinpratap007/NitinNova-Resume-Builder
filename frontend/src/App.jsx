@@ -45,10 +45,6 @@ export default function App() {
   const [polished, setPolished] = useState(null)
   const [savedId, setSavedId] = useState(null)
   const [route, setRoute] = useState('home')
-  const [auth, setAuth] = useState({
-    token: initialToken,
-    is_admin: localStorage.getItem('is_admin') === '1'
-  })
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [profileToLoad, setProfileToLoad] = useState(null)
   const [saveTrigger, setSaveTrigger] = useState(0)
@@ -62,23 +58,28 @@ export default function App() {
   // Build-time flag: only include admin features in admin.apk
   const IS_ADMIN_BUILD = import.meta.env.VITE_ADMIN_BUILD === 'true'
 
+  // Initialize auth state - user build never has admin features
+  const [auth, setAuth] = useState({
+    token: initialToken,
+    is_admin: IS_ADMIN_BUILD ? (localStorage.getItem('is_admin') === '1') : false
+  })
+
   useEffect(() => { setSidebarOpen(false) }, [route])
 
   useEffect(() => {
+    // When running user build, clear any stale admin flag from localStorage
+    if (!IS_ADMIN_BUILD) {
+      localStorage.removeItem('is_admin')
+    }
     fetchAppSettings()
-  }, [])
+  }, [IS_ADMIN_BUILD])
 
-  async function fetchAppSettings() {
-    // Local (admin-saved offline) settings apply first, server can override
-    try {
-      const local = JSON.parse(localStorage.getItem('nitinnova_admin_settings') || 'null')
-      if (local) applyAppSettings(local)
-    } catch {}
-    try {
-      const res = await API.get('/api/admin-settings')
-      if (res.data.ok) applyAppSettings(res.data.settings)
-    } catch {}
-  }
+  useEffect(() => {
+    // Sync localStorage is_admin flag with current build mode
+    if (IS_ADMIN_BUILD) {
+      localStorage.setItem('is_admin', auth.is_admin ? '1' : '0')
+    }
+  }, [IS_ADMIN_BUILD, auth.is_admin])
 
   function applyAppSettings(s) {
     const updated = {
