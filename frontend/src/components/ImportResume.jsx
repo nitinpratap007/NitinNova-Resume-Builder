@@ -32,9 +32,13 @@ export default function ImportResume({ onImport, onCancel }) {
   const [showRawText, setShowRawText] = useState(false)
 
   const triggerFilePicker = useCallback(() => {
-    if (fileInputRef.current) {
-      fileInputRef.current.click()
-    }
+    // fileInputRef is the DOM element (set via ref={setFileInputRef}),
+    // NOT a ref object — so there is no .current property.
+    const el = (fileInputRef && fileInputRef.current) ? fileInputRef.current : fileInputRef
+    if (el && typeof el.click === 'function') { el.click(); return }
+    // Fallback for Android WebView quirks
+    const fallback = document.querySelector('input[type="file"][data-import-input]')
+    if (fallback) fallback.click()
   }, [fileInputRef])
 
   const handleFileChange = async (e) => {
@@ -114,7 +118,8 @@ export default function ImportResume({ onImport, onCancel }) {
     setParsedData(null)
     setError('')
     setProgressStep(0)
-    if (fileInputRef.current) fileInputRef.current.value = ''
+    const el = fileInputRef && fileInputRef.current ? fileInputRef.current : fileInputRef
+    if (el) el.value = ''
   }
 
   const renderStep = (step, index) => {
@@ -151,7 +156,7 @@ export default function ImportResume({ onImport, onCancel }) {
   if (state === STATES.IDLE) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '48px 24px', textAlign: 'center' }}>
-        <input type="file" ref={setFileInputRef} style={{ display: 'none' }} accept=".pdf,.docx,.txt" onChange={handleFileChange} />
+        <input type="file" data-import-input ref={setFileInputRef} style={{ position: 'fixed', left: '-9999px', width: 1, height: 1, opacity: 0 }} accept=".pdf,.docx,.txt" onChange={handleFileChange} />
         <div style={{
           width: 96, height: 96, borderRadius: 24,
           background: 'linear-gradient(135deg, var(--primary), var(--secondary))',
