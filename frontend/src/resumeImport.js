@@ -240,23 +240,47 @@ function parseExperience(lines, startIdx) {
     const section = detectSection(line)
     if (section && section !== 'experience') break
 
+    // A line that is ONLY a date range ("2021 - Present") continues the
+    // previous entry — never treat it as a title/company of its own.
+    if (/^(?:19|20)\d{2}\s*(?:-|–|—|to)\s*(?:(?:19|20)\d{2}|present|current|now)$/i.test(line)) {
+      const last = experiences[experiences.length - 1]
+      if (last && !last.dates) last.dates = line
+      i++
+      continue
+    }
+
     // Look for job title + company pattern
     if (line.includes(' - ') || line.includes(' at ') || /^\d{4}\s*[-–]\s*\d{4}/.test(line)) {
       const exp = { title: '', company: '', dates: '', description: [] }
-      // Try to parse "Title - Company" or "Title at Company"
-      if (line.includes(' - ')) {
-        const parts = line.split(' - ')
-        exp.title = parts[0].trim()
-        exp.company = parts[1].trim()
-      } else if (line.includes(' at ')) {
-        const parts = line.split(' at ')
-        exp.title = parts[0].trim()
-        exp.company = parts[1].trim()
-      } else {
-        exp.title = line
+      // Extract a trailing date range FIRST so its internal dash
+      // ("(2021 - Present)", "2020 - 2023") never breaks the
+      // "Title - Company" split below — that split used to drop
+      // everything after the second " - ", losing "Present)".
+      let workLine = line
+      const parenDate = workLine.match(/\s*[\(\[]\s*((?:19|20)\d{2}\s*(?:-|–|—|to)\s*(?:(?:19|20)\d{2}|present|current|now))\s*[\)\]]\s*$/i)
+      const bareDate = workLine.match(/\s+((?:19|20)\d{2}\s*(?:-|–|—|to)\s*(?:(?:19|20)\d{2}|present|current|now))\s*$/i)
+      if (parenDate) {
+        exp.dates = parenDate[1].trim()
+        workLine = workLine.slice(0, parenDate.index).trim()
+      } else if (bareDate) {
+        exp.dates = bareDate[1].trim()
+        workLine = workLine.slice(0, bareDate.index).trim()
       }
-      // Check next line for dates
-      if (i + 1 < lines.length && /^\d{4}\s*[-–]\s*(\d{4}|present|current)/i.test(lines[i + 1])) {
+      // Try to parse "Title - Company" or "Title at Company" —
+      // keep EVERY remaining part so no text can be dropped.
+      if (workLine.includes(' - ')) {
+        const parts = workLine.split(' - ')
+        exp.title = parts[0].trim()
+        exp.company = parts.slice(1).join(' - ').trim()
+      } else if (workLine.includes(' at ')) {
+        const parts = workLine.split(' at ')
+        exp.title = parts[0].trim()
+        exp.company = parts.slice(1).join(' at ').trim()
+      } else {
+        exp.title = workLine
+      }
+      // Check next line for dates (only if not already extracted above)
+      if (!exp.dates && i + 1 < lines.length && /^\d{4}\s*[-–]\s*(\d{4}|present|current)/i.test(lines[i + 1])) {
         exp.dates = lines[i + 1]
         i++
       }
@@ -569,7 +593,8 @@ export function parseResumeText(rawText) {
     const { experiences } = parseExperience(sectionContent.experience, 0)
     result.bullets = experiences.map(e => {
       const desc = e.description.join(' | ')
-      return `${e.title} - ${e.company}${e.dates ? ` (${e.dates})` : ''}${desc ? ` - ${desc}` : ''}`
+      const head = [e.title, e.company].filter(Boolean).join(' - ')
+      return `${head}${e.dates ? ` (${e.dates})` : ''}${desc ? ` - ${desc}` : ''}`
     }).filter(Boolean)
   }
   if (sectionContent.education) {
