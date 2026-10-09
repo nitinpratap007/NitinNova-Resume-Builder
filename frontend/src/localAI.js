@@ -79,6 +79,11 @@ function pickVerb(line) {
 function polishProjectLine(line) {
   let text = line.replace(/^I\s+/i, '').replace(/\.$/, '').trim()
   if (!text) return null
+  // Never rewrite dated job/experience entries (e.g. "Title - Company (2020-2023)"
+  // or "Role at Company 2019 - Present") — imported resume content must stay
+  // verbatim; fabricating an action-verb prefix would falsify it.
+  const hasDateRange = /(19|20)\d{2}\s*(?:-|–|—|to)\s*((19|20)\d{2}|present|current|now)\b/i.test(text)
+  if (hasDateRange) return text
   const startsWithVerb = /^(built|developed|created|implemented|designed|maintained|led|optimized|automated|integrated|spearheaded|streamlined|engineered|launched|delivered|managed|coordinated|established|pioneered|enhanced|refactored|migrated|collaborated|mentored|facilitated|orchestrated|deployed|analyzed|architected)\b/i
   if (startsWithVerb.test(text)) {
     return text.charAt(0).toUpperCase() + text.slice(1)

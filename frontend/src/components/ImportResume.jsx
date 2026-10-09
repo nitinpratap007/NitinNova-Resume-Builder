@@ -82,6 +82,13 @@ export default function ImportResume({ onImport, onCancel }) {
   const handleConfirmImport = () => {
     if (!parsedData) return
     setState(STATES.IMPORTING)
+    // The Form composes the resume body from the `projects` textarea
+    // (one entry per line) — imported experience entries live in
+    // `bullets`, which the Form ignores. Merge them into `projects` so
+    // experience renders in the resume AND stays editable.
+    const expLines = (parsedData.bullets || []).filter(Boolean)
+    const projLines = (parsedData.projects || '').split('\n').map(s => s.trim()).filter(Boolean)
+    const mergedProjects = [...expLines, ...projLines].join('\n')
     // Normalize the data before importing
     const normalized = {
       name: parsedData.name || '',
@@ -92,7 +99,7 @@ export default function ImportResume({ onImport, onCancel }) {
       phone: parsedData.phone || '',
       education: parsedData.education || '',
       skills: parsedData.skills || '',
-      projects: parsedData.projects || '',
+      projects: mergedProjects,
       skillGroups: parsedData.skillGroups || [],
       sections: parsedData.sections || [],
       bullets: parsedData.bullets || [],

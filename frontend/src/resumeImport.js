@@ -66,6 +66,53 @@ export function validateFile(file) {
 
 // ---- Text extraction --------------------------------------------------------
 
+// PDF text extraction returns positioned fragments (items) with NO newlines.
+// Rebuild visual lines: group items by Y coordinate (rows), sort each row by
+// X, and join with space only where a real visual gap exists. Without this,
+// the whole resume becomes ONE line and section detection can never match.
+function reconstructPdfLines(items) {
+  const rows = new Map() // rounded Y -> { y, parts: [{x, w, h, str}] }
+  for (const item of items) {
+    if (!item || typeof item.str !== 'string' || item.str === '') continue
+    // item.transform = [a, b, c, d, x, y] (pdf.js text matrix)
+    const tr = Array.isArray(item.transform) ? item.transform : [1, 0, 0, 1, 0, 0]
+    const x = tr[4] || 0
+    const y = tr[5] || 0
+    const h = Math.abs(tr[3]) || 10 // glyph height ≈ font size
+    // item.width is in the same space as transform x when provided
+    const w = typeof item.width === 'number' && item.width > 0
+      ? item.width
+      : item.str.length * h * 0.5 // estimate when width missing
+    const key = Math.round(y)
+    if (!rows.has(key)) rows.set(key, { y, parts: [] })
+    rows.get(key).parts.push({ x, w, h, str: item.str })
+  }
+  // PDF origin is bottom-left → higher Y = higher on page → sort descending
+  const sortedRows = [...rows.values()].sort((a, b) => b.y - a.y)
+  const lines = []
+  for (const row of sortedRows) {
+    row.parts.sort((a, b) => a.x - b.x)
+    let line = ''
+    let prevEnd = null
+    for (const p of row.parts) {
+      if (prevEnd !== null) {
+        const gap = p.x - prevEnd
+        // Insert a space only for real visual gaps (not mid-word fragments)
+        const significantGap = gap > p.h * 0.25
+        const needsSpace = !/\s$/.test(line) && !/^\s/.test(p.str)
+        // Don't insert space before punctuation that hugs the previous word
+        const punctHug = /^[,.;:)\]}!?]/.test(p.str) || /[(\[{$\u2013\u2014-]$/.test(line)
+        if (significantGap && needsSpace && !punctHug) line += ' '
+      }
+      line += p.str
+      prevEnd = p.x + p.w
+    }
+    line = line.replace(/\s+/g, ' ').trim()
+    if (line) lines.push(line)
+  }
+  return lines.join('\n')
+}
+
 export async function extractTextFromPDF(file) {
   const arrayBuffer = await readFileBytes(file)
   let pdf
@@ -86,8 +133,8 @@ export async function extractTextFromPDF(file) {
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i)
     const content = await page.getTextContent()
-    const pageText = content.items.map(item => item.str).join(' ')
-    pages.push(pageText)
+    // Rebuild visual lines from positioned fragments (PDF has no newlines)
+    pages.push(reconstructPdfLines(content.items))
   }
   const fullText = pages.join('\n\n')
   // Detect scanned/image-based PDF
