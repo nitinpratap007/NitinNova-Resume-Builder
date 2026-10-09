@@ -3,10 +3,12 @@
 // Zero server upload; all processing local
 
 import * as pdfjsLib from 'pdfjs-dist'
+// Bundle the worker locally so PDF import works OFFLINE on phones (no CDN needed)
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { normalizeResumeData } from './resumeNormalize'
 
-// Configure pdf.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`
+// Configure pdf.js worker — local bundled asset first, CDN as last-resort fallback
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
 
 // ---- File validation --------------------------------------------------------
 
@@ -18,24 +20,68 @@ export const SUPPORTED_TYPES = {
 
 export const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10 MB
 
+// Android file pickers often return empty or generic MIME types
+// (application/octet-stream, ""). Detect kind from MIME first, then
+// fall back to the file extension so picks from phone storage still work.
+export function getFileKind(file) {
+  if (!file) return null
+  const type = (file.type || '').toLowerCase()
+  if (type === 'application/pdf') return 'pdf'
+  if (type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') return 'docx'
+  if (type === 'text/plain') return 'txt'
+  // Extension fallback (handles empty/generic MIME from Android SAF)
+  const name = (file.name || '').toLowerCase()
+  if (name.endsWith('.pdf')) return 'pdf'
+  if (name.endsWith('.docx')) return 'docx'
+  if (name.endsWith('.doc')) return 'docx'
+  if (name.endsWith('.txt') || name.endsWith('.text')) return 'txt'
+  return null
+}
+
+// Read file bytes with FileReader fallback for older Android WebViews
+// where File.arrayBuffer() may be missing
+export function readFileBytes(file) {
+  if (typeof file.arrayBuffer === 'function') {
+    return file.arrayBuffer()
+  }
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result)
+    reader.onerror = () => reject(new Error('Could not read the selected file.'))
+    reader.readAsArrayBuffer(file)
+  })
+}
+
 export function validateFile(file) {
   if (!file) return { ok: false, error: 'No file selected.' }
   if (file.size > MAX_FILE_SIZE) {
     return { ok: false, error: `File too large (${(file.size/1024/1024).toFixed(1)} MB). Maximum is ${MAX_FILE_SIZE/1024/1024} MB.` }
   }
-  const ext = SUPPORTED_TYPES[file.type]
-  if (!ext) {
+  const kind = getFileKind(file)
+  if (!kind) {
     return { ok: false, error: 'Unsupported file type. Please select a PDF, DOCX, or TXT resume.' }
   }
-  return { ok: true, ext }
+  return { ok: true, kind }
 }
 
 // ---- Text extraction --------------------------------------------------------
 
 export async function extractTextFromPDF(file) {
-  const arrayBuffer = await file.arrayBuffer()
-  const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer })
-  const pdf = await loadingTask.promise
+  const arrayBuffer = await readFileBytes(file)
+  let pdf
+  try {
+    const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer.slice(0) })
+    pdf = await loadingTask.promise
+  } catch (workerErr) {
+    // Fallback: some Android WebViews cannot spawn web workers —
+    // retry parsing on the main thread instead of failing outright
+    try {
+      const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer.slice(0), disableWorker: true, isEvalSupported: false })
+      pdf = await loadingTask.promise
+    } catch {
+      throw new Error('This PDF could not be read. It may be password-protected or corrupted — please try a different file.')
+    }
+  }
   const pages = []
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i)
@@ -54,22 +100,26 @@ export async function extractTextFromPDF(file) {
 
 export async function extractTextFromDOCX(file) {
   const mammoth = await import('mammoth')
-  const arrayBuffer = await file.arrayBuffer()
+  const arrayBuffer = await readFileBytes(file)
   const result = await mammoth.extractRawText({ arrayBuffer })
   return { text: result.value, messages: result.messages }
 }
 
 export async function extractTextFromTXT(file) {
-  return { text: await file.text() }
+  if (typeof file.text === 'function') {
+    return { text: await file.text() }
+  }
+  const bytes = await readFileBytes(file)
+  return { text: new TextDecoder('utf-8').decode(bytes) }
 }
 
 export async function extractText(file) {
   const validation = validateFile(file)
   if (!validation.ok) throw new Error(validation.error)
 
-  if (file.type === 'application/pdf') return extractTextFromPDF(file)
-  if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') return extractTextFromDOCX(file)
-  if (file.type === 'text/plain') return extractTextFromTXT(file)
+  if (validation.kind === 'pdf') return extractTextFromPDF(file)
+  if (validation.kind === 'docx') return extractTextFromDOCX(file)
+  if (validation.kind === 'txt') return extractTextFromTXT(file)
   throw new Error('Unsupported file type')
 }
 

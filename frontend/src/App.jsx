@@ -95,6 +95,18 @@ export default function App() {
     }
   }
 
+  async function fetchAppSettings() {
+    // Local (admin-saved offline) settings apply first, server can override
+    try {
+      const local = JSON.parse(localStorage.getItem('nitinnova_admin_settings') || 'null')
+      if (local) applyAppSettings(local)
+    } catch {}
+    try {
+      const res = await API.get('/api/admin-settings')
+      if (res.data.ok) applyAppSettings(res.data.settings)
+    } catch {}
+  }
+
   useEffect(() => {
     let lastTime = 0
     const listener = CapApp.addListener('backButton', () => {

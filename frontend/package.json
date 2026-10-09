@@ -10,8 +10,8 @@
     "cap:copy": "npx cap copy",
     "cap:add:android": "npx cap add android",
     "cap:open:android": "npx cap open android",
-    "build:user": "VITE_ADMIN_BUILD=false vite build && npx cap copy android",
-    "build:admin": "VITE_ADMIN_BUILD=true vite build && npx cap copy android"
+    "build:user": "vite build --mode user && npx cap copy android",
+    "build:admin": "vite build --mode admin && npx cap copy android"
   },
   "dependencies": {
     "@capacitor/android": "^8.4.1",

@@ -17,3 +17,6 @@ frontend/android/keystore.jks
 android-sdk/
 android-tooling/
 .vscode/
+
+test_resume.txt
+*.apk
