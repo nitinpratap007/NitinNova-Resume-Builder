@@ -186,7 +186,7 @@ isolation guarantee; tracked here per file (§ above).
 | IndexedDB migration breaks draft/profiles | fallback chain IDB → localStorage; migration tested in browser |
 | Relative `base: './'` breaks `?url` pdf worker | production-build PDF import tested explicitly |
 | SPA deep-link 404 on static hosts | `404.html` (Pages) + `vercel.json` rewrite |
-| CI workflow rebuilds APK on push | pre-existing repo behavior (artifact upload only); local APKs and sources untouched — documented, workflow NOT modified |
+| CI workflow rebuilds APK on push | pre-existing repo behavior; workflow NOT modified. Note: it has **failed instantly (0 jobs) on every recent push including before this task** (runs #12–#14, most likely a workflow-validation issue such as `secrets` in step `if:`) — so pushes never triggered Android builds anyway; local APKs are the distributed artifacts and remain hash-identical |
 
 ## 10. PLAN STATUS
 

@@ -134,7 +134,7 @@ steps; `files.list`/`files.get` used to verify actual download bytes; dialogs
 | Resume data in URLs | never (hash carries route names only) |
 | Lighthouse (prod, root URL) | **Accessibility 100 · Best Practices 100 · SEO 100**, `failures: []` |
 | Print stylesheet audit | 2 print blocks; app chrome hidden; preview de-chromed; `break-inside: avoid` on resume sections |
-| Repo isolation | `git status` shows only the three `WEB_VERSION_*.md` docs + `web/` + `.github/workflows/web-pages.yml` — **zero `frontend/` changes**; APK SHA-256 re-verified vs baseline (see §11); everything committed as `e7e58ed` |
+| Repo isolation | `git status` shows only the three `WEB_VERSION_*.md` docs + `web/` + `.github/workflows/web-pages.yml` — **zero `frontend/` changes**; APK SHA-256 re-verified vs baseline (see §11); everything committed and pushed (`fab60c5`) |
 
 ## 9. SECURITY TESTS
 
