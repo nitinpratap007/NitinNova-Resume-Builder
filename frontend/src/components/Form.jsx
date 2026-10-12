@@ -344,7 +344,7 @@ export default function Form({ onPolished, onSaved, onSavePdf, initialData }) {
             <div className="form-group"><label>Email</label>
               <input name="email" type="email" placeholder="e.g. nitin@gmail.com" value={form.email} onChange={change} /></div>
             <div className="form-group"><label>Phone</label>
-              <input name="phone" placeholder="e.g. +91 0000000000" value={form.phone} onChange={change} /></div>
+              <input name="phone" placeholder="e.g. +91 98765 43210" value={form.phone} onChange={change} /></div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' }}>
             <div className="form-group"><label>GitHub</label>

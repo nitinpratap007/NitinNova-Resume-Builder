@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import API from '../api'
+import { getSession } from '../auth'
 
 const DEV_KEY = 'nitinnova_developer_info'
 
@@ -23,7 +24,8 @@ export default function Developer() {
   const [form, setForm] = useState(DEFAULT_INFO)
   const [saving, setSaving] = useState(false)
 
-  const isAdmin = localStorage.getItem('is_admin') === '1'
+  // Owner-only edit controls; invisible to everyone else.
+  const isAdmin = (getSession() || {}).role === 'admin'
 
   useEffect(() => { fetchInfo() }, [])
 

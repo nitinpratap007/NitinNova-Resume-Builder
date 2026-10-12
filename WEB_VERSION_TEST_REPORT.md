@@ -201,3 +201,92 @@ frontend/Android build command was ever executed.
   same as the APK.
 * **Backup >20 MB guard** and quota-exhaustion messaging are code-verified but
   not exercised with synthetic 20 MB inputs.
+
+
+---
+
+# ROUND 2 - Accounts, Security Fixes & New Features (same browser, production build)
+
+Round 2 followed the security review requested by the project owner:
+(1) admin credentials were exposed on GitHub, (2) a resume-building account
+should be required while exploration stays open, (3) only the owner can use
+admin features and regular users must not even know admin exists, plus three
+feature requests (Download-APK button, remove the APK-share text, free
+offline AI that drafts a full resume).
+
+## R2.1 ARCHITECTURE DECISION (chosen by owner: "everything free")
+
+Device-local accounts (`web/src/auth.js`):
+* Account required to OPEN the editor / dashboard / cover letter / settings.
+  Welcome, template gallery, Feedback and Developer stay public.
+* Accounts live only in this browser (localStorage `nn_users`); passwords are
+  PBKDF2-SHA256, 310 000 iterations (WebCrypto). No server, no cost, offline.
+* Resumes are owner-stamped (`owner` field, IndexedDB) - each account sees
+  only its own resumes. Pre-account data is adopted by the first account that
+  signs in on the device (claim-on-first-login, nobody loses old work).
+* Owner (admin) account: the bundle ships ONLY `SHA-256(email)` +
+  `PBKDF2(passcode)`, stored in the same shape as a normal user record -
+  nothing in source or bundle reveals that an admin account exists. Signing
+  up with the owner email is blocked with a neutral "email already exists".
+
+## R2.2 SECURITY FIXES (all verified in the built bundle)
+
+| # | Fix | Verification |
+|---|-----|--------------|
+| S1 | `frontend/src/Auth.jsx` offline-admin bypass removed (hard-coded email+password granted admin without any server) | source grep: 0 matches for `OFFLINE_ADMIN`/old password in `frontend/` and `web/` |
+| S2 | Admin seed snippet with plaintext password removed from `README.md` (replaced with `create_admin.py` instructions + security notes) | README diff; git history purge performed afterwards (see R2.5) |
+| S3 | Website owner login uses digests only - bundle scan for old credentials: **CLEAN**; scan for "Admin Access"/"Admin Login" strings: **0 matches** |
+| S4 | Backend admin password rotated (old one was public on GitHub); new strong passcode set in `backend/resumes.db` (scrypt hash) | DB read-back shows new hash prefix |
+| S5 | Phone placeholder in both Form.jsx copies changed from the real phone number (which was also the old password) to a generic example |
+| S6 | Git history purge: password, admin email and seed snippet removed from ALL old commits + force-push (all commit IDs changed) | `git log -S` / `git grep` across rewritten history: 0 matches |
+
+## R2.3 FEATURE TESTS - 15/15 PASS (production build, http://localhost:4174)
+
+| # | Scenario | Result |
+|---|----------|--------|
+| 1 | Signed-out visit to `#/home` (deep link) redirects to `#/auth` | PASS - hash becomes `#/auth`, login form shown |
+| 2 | Sign up (name/email/password) creates account, session set, user lands in editor; sidebar shows name chip + Log out | PASS |
+| 3 | Regular user sees editor with new "AI Draft" tab; page text contains zero occurrences of "admin" | PASS |
+| 4 | AI Draft: role+years+skills+highlights+education -> summary, headline, categorized skills, action-verb bullets built ONLY from input (no fabricated metrics/numbers) | PASS |
+| 5 | Ctrl+S saves resume; profile is owner-stamped (`owner: testuser@example.com`) in IndexedDB | PASS |
+| 6 | Log out: session cleared, private routes blocked; deep link `#/dashboard` while signed out redirects to auth | PASS |
+| 7 | Log back in: redirected to pending route (dashboard); saved resume visible again | PASS |
+| 8 | Owner email + WRONG password in the normal login -> neutral "Incorrect password. Please try again." (no admin hint) | PASS |
+| 9 | Owner email + correct passcode in the SAME normal login -> admin session; "Admin Panel" nav appears | PASS |
+| 10 | Admin Panel opens -> new **Accounts** tab lists device accounts with Delete | PASS |
+| 11 | Sign up squatting the owner email -> blocked, neutral "email already exists" message | PASS |
+| 12 | `/user.apk` download button target serves 200, 4 244 030 bytes | PASS |
+| 13 | Second account created on the same device sees **0** profiles (first user's resume is private) | PASS |
+| 14 | Session survives full page reload (chip + role restored from localStorage) | PASS |
+| 15 | Owner deletes a device account: confirm dialog -> account removed from list + storage | PASS |
+
+Additional checks: AI Draft empty-role validation shows inline error; Feedback
+and Developer pages public and render for signed-out visitors; Settings shows
+"Signed in as ..."; 0 application console errors across all flows (the only 2
+console errors observed are Electron-harness internals, not app errors).
+
+## R2.4 APK-SHARE TEXT + WELCOME PAGE
+
+* `InviteFriend.jsx` (web + frontend copies): removed "Please share the parent
+  .apk file..." from the share text - sharing now sends the website link only.
+* Welcome page: hero button "Get the Android app" -> `./user.apk` (relative,
+  works on any static host); privacy copy updated for the account model;
+  feature card documents the free offline AI drafting.
+
+## R2.5 OPERATIONS PERFORMED (owner-approved)
+
+* Git history rewritten with `git filter-repo` (literals: old password,
+  admin email, seed-snippet lines) + force-push. All commit IDs changed;
+  docs that referenced old hashes were re-checked.
+* Backend admin password rotated; new passcode communicated to the owner
+  out-of-band (it is NOT stored anywhere in the repository).
+
+## R2.6 LIMITATIONS (honest)
+
+* Device-local accounts are per-browser: a different device/browser needs a
+  new account (this is the "everything free, no server" trade-off chosen by
+  the owner; a backend deployment can be added later - see SETUP 8).
+* Deleting an account does not delete its resumes (documented in the UI) -
+  they remain owner-stamped and inaccessible without that login.
+* PBKDF2 at 310k iterations takes ~0.5-1 s per login on slow devices (by
+  design; security over speed).

@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import API from './api'
 import Form from './components/Form'
 import Preview from './components/Preview'
 import Auth from './components/Auth'
@@ -10,6 +9,7 @@ import CoverLetter from './components/CoverLetter'
 import Dashboard from './components/Dashboard'
 import Welcome from './components/Welcome'
 import Settings from './components/Settings'
+import { getSession, logout as clearSession } from './auth'
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -42,13 +42,17 @@ class ErrorBoundary extends React.Component {
 // ---- lightweight hash routing (web replacement for the Android back button) ----
 // Only route NAMES ever appear in the URL — never resume data.
 const KNOWN_ROUTES = ['welcome', 'home', 'dashboard', 'cover-letter', 'feedback', 'developer', 'settings', 'auth', 'admin']
+// Explorable without an account; everything that touches resume data needs one.
+const PUBLIC_ROUTES = ['welcome', 'auth', 'feedback', 'developer']
+// Owner-only (hidden from everyone else — no nav entry unless you are signed in as owner)
+const ADMIN_ROUTES = ['admin']
+
 function routeFromHash() {
   const h = (window.location.hash || '').replace(/^#\/?/, '').split('?')[0]
   return KNOWN_ROUTES.includes(h) ? h : 'welcome'
 }
 
 export default function App() {
-  const initialToken = localStorage.getItem('token')
   const [polished, setPolished] = useState(null)
   const [savedId, setSavedId] = useState(null)
   const [route, setRoute] = useState(routeFromHash)
@@ -56,20 +60,14 @@ export default function App() {
   const [profileToLoad, setProfileToLoad] = useState(null)
   const [saveTrigger, setSaveTrigger] = useState(0)
   const [toast, setToast] = useState('')
+  // Device-local session (auth.js). null = signed out (can still explore).
+  const [session, setSession] = useState(getSession)
+  const [pendingRoute, setPendingRoute] = useState(null) // where to go after login
   const [appSettings, setAppSettings] = useState({
     appName: 'NitinNova',
     appTagline: 'CareerCraft by Nitin Pratap',
     primaryColor: '#6366f1',
     showShareButton: true,
-  })
-
-  // Build-time flag: only include admin features when explicitly enabled
-  const IS_ADMIN_BUILD = import.meta.env.VITE_ADMIN_BUILD === 'true'
-
-  // Initialize auth state - default web build never has admin features
-  const [auth, setAuth] = useState({
-    token: initialToken,
-    is_admin: IS_ADMIN_BUILD ? (localStorage.getItem('is_admin') === '1') : false
   })
 
   // keep URL hash in sync with the route (back/forward buttons work natively)
@@ -95,21 +93,24 @@ export default function App() {
     if (route !== 'home') setProfileToLoad(null)
   }, [route])
 
+  // ---- login gate -------------------------------------------------------------
+  // Private routes (resume data) require an account; the owner-only routes are
+  // additionally invisible unless the session carries the owner role.
   useEffect(() => {
-    // When running the default (non-admin) build, clear any stale admin flag
-    if (!IS_ADMIN_BUILD) {
-      localStorage.removeItem('is_admin')
+    if (!session && !PUBLIC_ROUTES.includes(route)) {
+      setPendingRoute(prev => prev || (route === 'welcome' ? null : route))
+      setRoute('auth')
+      return
     }
-    fetchAppSettings()
+    if (session && route === 'auth') {
+      setRoute('welcome')
+      return
+    }
+    if (session && ADMIN_ROUTES.includes(route) && session.role !== 'admin') {
+      setRoute('welcome')
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [IS_ADMIN_BUILD])
-
-  useEffect(() => {
-    // Sync localStorage is_admin flag with current build mode
-    if (IS_ADMIN_BUILD) {
-      localStorage.setItem('is_admin', auth.is_admin ? '1' : '0')
-    }
-  }, [IS_ADMIN_BUILD, auth.is_admin])
+  }, [route, session])
 
   // Escape closes the mobile sidebar (web equivalent of Android back-for-menu)
   useEffect(() => {
@@ -140,21 +141,52 @@ export default function App() {
     }
   }
 
-  async function fetchAppSettings() {
-    // Local (admin-saved offline) settings apply first, server can override
+  useEffect(() => {
+    // Locally saved (owner) settings apply on boot — no network involved.
     try {
       const local = JSON.parse(localStorage.getItem('nitinnova_admin_settings') || 'null')
       if (local) applyAppSettings(local)
-    } catch {}
-    try {
-      const res = await API.get('/api/admin-settings')
-      if (res.data.ok) applyAppSettings(res.data.settings)
-    } catch {}
+      else document.title = 'NitinNova - CareerCraft by Nitin Pratap'
+    } catch { document.title = 'NitinNova - CareerCraft by Nitin Pratap' }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  function onAuth(s) {
+    setSession(s)
+    const target = pendingRoute
+    setPendingRoute(null)
+    setRoute(target && PUBLIC_ROUTES.includes(target) === false ? target : 'welcome')
   }
 
-  function onAuth(a) {
-    setAuth(a)
+  function logout() {
+    clearSession()
+    setSession(null)
     setRoute('welcome')
+  }
+
+  function navigate(r) {
+    // Clicking a private nav item while signed out routes through the login
+    // screen and returns you to the destination afterwards.
+    if (!session && !PUBLIC_ROUTES.includes(r)) {
+      setPendingRoute(r)
+      setRoute('auth')
+      setSidebarOpen(false)
+      return
+    }
+    if (r === 'admin' && (!session || session.role !== 'admin')) {
+      setRoute('welcome')
+      setSidebarOpen(false)
+      return
+    }
+    setRoute(r)
+    setSidebarOpen(false)
+    // Move focus to main content for keyboard/screen-reader users
+    try { document.querySelector('.main-content')?.focus?.() } catch {}
+  }
+
+  function handleLoadProfile(profile) {
+    setProfileToLoad(profile)
+    setRoute('home')
   }
 
   async function handleShare() {
@@ -178,26 +210,6 @@ export default function App() {
     } catch {
       showToast('Copy this page URL to share it.')
     }
-  }
-
-  function logout() {
-    localStorage.removeItem('token')
-    localStorage.removeItem('is_admin')
-    localStorage.removeItem('nitinnova_current_user')
-    setAuth({ token: null, is_admin: false })
-    setRoute(IS_ADMIN_BUILD ? 'auth' : 'welcome')
-  }
-
-  function navigate(r) {
-    setRoute(r)
-    setSidebarOpen(false)
-    // Move focus to main content for keyboard/screen-reader users
-    try { document.querySelector('.main-content')?.focus?.() } catch {}
-  }
-
-  function handleLoadProfile(profile) {
-    setProfileToLoad(profile)
-    setRoute('home')
   }
 
   return (
@@ -247,7 +259,7 @@ export default function App() {
             onClick={() => navigate('developer')}>
             <span>{'\uD83D\uDC64'}</span> Developer
           </button>
-          {IS_ADMIN_BUILD && auth.is_admin && (
+          {session && session.role === 'admin' && (
             <button className={`nav-button ${route === 'admin' ? 'active' : ''}`}
               onClick={() => navigate('admin')}>
               <span>{'\uD83D\uDEE1\uFE0F'}</span> Admin Panel
@@ -258,20 +270,26 @@ export default function App() {
               <span>{'\uD83D\uDD17'}</span> Share
             </button>
           )}
-          {IS_ADMIN_BUILD && auth.token ? (
-            <button className="nav-button logout-button" onClick={logout}>
-              <span>{'\uD83D\uDEAA'}</span> Logout
-            </button>
-          ) : IS_ADMIN_BUILD && !auth.token ? (
+          {session ? (
+            <>
+              <div className="nav-user-chip" title="Signed in on this device">
+                <span>{'\uD83D\uDC64'}</span>
+                <span className="nav-user-name">{session.name || session.email}</span>
+              </div>
+              <button className="nav-button logout-button" onClick={logout}>
+                <span>{'\uD83D\uDEAA'}</span> Log out
+              </button>
+            </>
+          ) : (
             <button className={`nav-button ${route === 'auth' ? 'active' : ''}`}
               onClick={() => navigate('auth')}>
-              <span>{'\uD83D\uDD11'}</span> Admin Login
+              <span>{'\uD83D\uDD11'}</span> Log in / Sign up
             </button>
-          ) : null}
+          )}
         </nav>
 
         <div className="sidebar-footnote">
-          Runs entirely in your browser — resumes stay on this device.
+          Resumes stay on this device — a free account is only needed to start building.
         </div>
       </aside>
 
@@ -279,9 +297,9 @@ export default function App() {
         <div className="animate-fade-in">
           {route === 'welcome' && (
             <Welcome onNavigate={navigate} onNewResume={() => navigate('home')}
-              onOpenDashboard={() => navigate('dashboard')} />
+              onOpenDashboard={() => navigate('dashboard')} session={session} />
           )}
-          {route === 'home' && (
+          {route === 'home' && session && (
             <div className="grid-2col">
               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                 <Form
@@ -297,16 +315,16 @@ export default function App() {
               </div>
             </div>
           )}
-          {route === 'dashboard' && (
-            <Dashboard onLoadProfile={handleLoadProfile} isAdmin={IS_ADMIN_BUILD && auth.is_admin}
+          {route === 'dashboard' && session && (
+            <Dashboard onLoadProfile={handleLoadProfile} isAdmin={session.role === 'admin'}
               onGoAuth={() => navigate('auth')} onToast={showToast} />
           )}
-          {route === 'cover-letter' && <CoverLetter formData={polished || {}} />}
-          {IS_ADMIN_BUILD && route === 'auth' && <Auth onAuth={onAuth} />}
+          {route === 'cover-letter' && session && <CoverLetter formData={polished || {}} />}
+          {route === 'auth' && <Auth onAuth={onAuth} onBack={() => navigate('welcome')} />}
           {route === 'developer' && <Developer />}
           {route === 'feedback' && <Feedback />}
-          {route === 'settings' && <Settings onToast={showToast} />}
-          {IS_ADMIN_BUILD && route === 'admin' && auth.token && auth.is_admin && <AdminPanel />}
+          {route === 'settings' && session && <Settings onToast={showToast} />}
+          {route === 'admin' && session && session.role === 'admin' && <AdminPanel />}
         </div>
       </main>
 

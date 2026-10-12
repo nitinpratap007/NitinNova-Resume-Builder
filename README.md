@@ -98,25 +98,17 @@ Refresh tokens & rate-limiting
 
 - The frontend includes a lightweight client-side polish (`frontend/src/localAI.js`) that converts your raw project and skills lines into action-oriented bullets without calling the backend or any external API. Use the "Generate (offline)" button in the UI to produce polished bullets entirely in the browser.
 
-from models import SessionLocal, User
-from werkzeug.security import generate_password_hash
+Create the first admin account (backend)
+- Run the interactive helper — it asks for email, name and password, and never stores credentials in the repo:
 
-db = SessionLocal()
+```bash
+cd backend
+python create_admin.py
+```
 
-email = "you@example.com"
-if db.query(User).filter(User.email == email).first():
-    print("Admin already exists:", email)
-else:
-    admin = User(
-        name="Nitin Pratap",
-        email=you@example.com,
-        password_hash=generate_password_hash("REMOVED"),
-        is_admin=1
-    )
-    db.add(admin)
-    db.commit()
-    print("Admin created:", admin.id)
-
-db.close()
+⚠️ **Security notes**
+- Never commit real credentials, emails or passwords to this repository.
+- Admin login is verified only by the backend (`POST /auth/login`); the apps contain no built-in credentials and no offline admin bypass.
+- If a credential was ever committed, consider it public: rotate it (change the password) and purge it from git history.
 
 

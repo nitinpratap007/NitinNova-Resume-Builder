@@ -7,6 +7,8 @@
 //
 //   DB    : nitinnova-web
 //   store : kv   —  keys: 'profiles', 'draft', 'versions', 'settings'
+//                    (drafts are stored per account as 'draft:<email>';
+//                     profiles carry an 'owner' email — see auth.js)
 //
 // Falls back to localStorage automatically when IndexedDB is unavailable
 // (private browsing / blocked storage), and migrates any legacy localStorage
@@ -131,8 +133,25 @@ async function kvSet(key, value) {
   return 'local'
 }
 
+// ---- account scoping (device-local accounts, see auth.js) -----------------------
+// Resumes are owned by the account that saved them. Profiles created before
+// accounts existed have no owner; they stay visible and are adopted by the
+// first account that signs in on this device (claimOrphanData below).
+// The session is a tiny synchronous localStorage flag (never resume data).
+function currentEmail() {
+  try {
+    const raw = localStorage.getItem('nn_session')
+    const s = raw ? JSON.parse(raw) : null
+    return s && s.email ? String(s.email).toLowerCase() : null
+  } catch { return null }
+}
+function draftKey() {
+  const email = currentEmail()
+  return email ? 'draft:' + email : 'draft'
+}
+
 // ---- profiles ------------------------------------------------------------------
-export async function getProfiles() {
+async function rawProfiles() {
   let v = await kvGet('profiles')
   if (v === undefined) {
     const legacy = legacyGet('profiles') // one-time migration from APK-era keys
@@ -144,10 +163,44 @@ export async function getProfiles() {
   return Array.isArray(v) ? v : []
 }
 
+export async function getProfiles() {
+  const list = await rawProfiles()
+  const email = currentEmail()
+  if (!email) return list.filter(p => !p || !p.owner)
+  return list.filter(p => !p || !p.owner || p.owner === email)
+}
+
 export async function saveProfiles(profiles) {
+  const email = currentEmail()
   const list = (Array.isArray(profiles) ? profiles : []).slice(0, 60)
+    .map(p => (email && p && !p.owner) ? { ...p, owner: email } : p)
   await kvSet('profiles', list)
   return list
+}
+
+// Adopt pre-account data (resumes + draft built before login existed) into
+// the account that signs in first on this device, so nobody loses work.
+export async function claimOrphanData(email) {
+  const norm = String(email || '').toLowerCase()
+  if (!norm) return
+  try {
+    const list = await rawProfiles()
+    let changed = false
+    const next = list.map(p => {
+      if (p && !p.owner) { changed = true; return { ...p, owner: norm } }
+      return p
+    })
+    if (changed) await kvSet('profiles', next)
+  } catch {}
+  try {
+    const key = 'draft:' + norm
+    const own = await kvGet(key)
+    const shared = await kvGet('draft')
+    if ((own === undefined || own === null) && shared && typeof shared === 'object' && shared.form) {
+      await kvSet(key, shared)
+      await kvSet('draft', null) // one claimant only
+    }
+  } catch {}
 }
 
 // ---- draft (autosave) ------------------------------------------------------------
@@ -162,10 +215,12 @@ function emitDraftStatus(status, at) {
 
 let draftTimer = null
 let pendingDraft = undefined
+let pendingDraftKey = null
 let hasPendingDraft = false
 
 export function queueDraftSave(draft) {
   pendingDraft = draft
+  pendingDraftKey = draftKey() // capture NOW: the account could change later
   hasPendingDraft = true
   emitDraftStatus('saving')
   clearTimeout(draftTimer)
@@ -175,11 +230,13 @@ export function queueDraftSave(draft) {
 export async function flushDraftSave() {
   if (!hasPendingDraft) return
   const d = pendingDraft
+  const key = pendingDraftKey || draftKey()
   hasPendingDraft = false
   pendingDraft = undefined
+  pendingDraftKey = null
   clearTimeout(draftTimer)
   try {
-    await kvSet('draft', d)
+    await kvSet(key, d)
     emitDraftStatus('saved', Date.now())
   } catch (e) {
     console.warn('Draft autosave failed:', e)
@@ -191,17 +248,26 @@ export async function flushDraftSave() {
 // user confirmation so unsaved work is never wiped silently.
 export async function clearDraft() {
   await flushDraftSave() // don't let a queued write resurrect the old draft
-  await kvSet('draft', null)
+  await kvSet(draftKey(), null)
   emitDraftStatus('cleared')
 }
 
 export async function getDraft() {
-  let v = await kvGet('draft')
+  const key = draftKey()
+  let v = await kvGet(key)
+  if (v === undefined && key !== 'draft') {
+    // pre-account draft — claim it for the signed-in account (one claimant)
+    const shared = await kvGet('draft')
+    if (shared && typeof shared === 'object' && shared.form) {
+      v = shared
+      try { await kvSet(key, shared); await kvSet('draft', null) } catch {}
+    }
+  }
   if (v === undefined) {
     const legacy = legacyGet('draft')
     if (legacy && typeof legacy === 'object') {
       v = legacy
-      try { await kvSet('draft', legacy) } catch {}
+      try { await kvSet(key, legacy) } catch {}
     }
   }
   return v && typeof v === 'object' && v.form ? v : null
@@ -256,9 +322,15 @@ export async function setSetting(key, value) {
 
 // ---- backup / restore ----------------------------------------------------------------
 export async function exportAllData() {
-  const [profiles, draft, versions, settings] = await Promise.all([
-    kvGet('profiles'), kvGet('draft'), kvGet('versions'), kvGet('settings'),
+  // Only THIS account's resumes are exported (other accounts on the same
+  // device keep their own data private). Unowned pre-account resumes are
+  // included — they belong to whoever signs in on this device.
+  const [allProfiles, draft, versions, settings] = await Promise.all([
+    kvGet('profiles'), kvGet(draftKey()), kvGet('versions'), kvGet('settings'),
   ])
+  const email = currentEmail()
+  const profiles = (Array.isArray(allProfiles) ? allProfiles : [])
+    .filter(p => !p || !p.owner || !email || p.owner === email)
   return {
     app: 'nitinnova-web-backup',
     version: 1,
@@ -335,7 +407,7 @@ export async function importAllData(raw, mode /* 'merge' | 'replace' */) {
 
   if (mode === 'replace') {
     await saveProfiles(profiles)
-    if (draft) await kvSet('draft', draft)
+    if (draft) await kvSet(draftKey(), draft)
     await kvSet('versions', versions)
     await kvSet('settings', settings)
   } else {
@@ -348,7 +420,7 @@ export async function importAllData(raw, mode /* 'merge' | 'replace' */) {
       byId.set(String(id), { ...p, id })
     })
     await saveProfiles([...byId.values()])
-    if (draft && !(await getDraft())) await kvSet('draft', draft)
+    if (draft && !(await getDraft())) await kvSet(draftKey(), draft)
     const existingVersions = (await kvGet('versions')) || {}
     for (const [k, list] of Object.entries(versions)) {
       if (Array.isArray(list)) existingVersions[k] = list.slice(0, 10)
@@ -373,12 +445,15 @@ export async function clearAllAppData() {
   await flushDraftSave()
   await idbClear()
   lsClear()
-  // Web-only session flag + on-device feedback copies are app data too.
+  // Web-only session flags + on-device feedback copies are app data too.
+  // Device accounts are removed as well ("delete everything" means exactly
+  // that) — the CURRENT session is kept so this visit isn't interrupted;
+  // the next reload starts from a clean first-run state.
   try {
     localStorage.removeItem('nn_active_profile_id')
     localStorage.removeItem('nitinnova_local_feedbacks')
+    localStorage.removeItem('nn_users')
   } catch {}
-  // Leave auth flags alone; only app/resume data is removed.
   draftListeners.forEach(cb => { try { cb('cleared') } catch {} })
 }
 

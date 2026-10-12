@@ -45,8 +45,12 @@ npm run preview   # → http://localhost:4174  (strictPort)
 
 | Variable | Value | Meaning |
 |---|---|---|
-| `VITE_ADMIN_BUILD` | `false` | Builds the **user** variant: admin/login code is compiled out — identical gating to the APK's `.env.user`. Admin source files are kept but tree-shaken away. |
 | `VITE_API_URL` | *(unset)* | Backend base URL. **Unset = offline mode**: `api.js` rejects instantly with `NO_BACKEND` and every caller falls back to local behavior (local AI, offline feedback, offline cover letter). |
+
+> **Round 2 change:** `VITE_ADMIN_BUILD` no longer exists. Accounts are
+> device-local (`web/src/auth.js`) — the owner signs in through the normal
+> login form and the Admin Panel appears for that session only. No admin UI,
+> strings or credentials exist in the bundle for anyone else.
 
 To optionally connect a backend later, add one line — no code changes needed:
 
@@ -61,7 +65,9 @@ features then activate, everything else is unchanged.)
 
 | Data | Where | Notes |
 |---|---|---|
-| Resume profiles, draft, version history, settings | **IndexedDB** (`nitinnova-web` DB, `kv` store) with automatic **localStorage fallback** | created/updated/debounced by `web/src/storage.js` |
+| Accounts (email, name, PBKDF2 salt+hash, role) | `localStorage` (`nn_users`) | device-local, created by Sign up; owner account verified against digests in `web/src/auth.js` |
+| Session (who is signed in) | `localStorage` (`nn_session`) | cleared by Log out |
+| Resume profiles, draft, version history, settings | **IndexedDB** (`nitinnova-web` DB, `kv` store) with automatic **localStorage fallback** | created/updated/debounced by `web/src/storage.js`; profiles are owner-stamped (`owner` field), drafts keyed per account (`draft:<email>`) |
 | Small flags (session profile id, UI flags) | `localStorage` (tiny keys, synchronous reads) | sync-by-design so saves can't race |
 | Legacy keys from older runs | migrated once into IndexedDB, then removed | |
 | Feedback submissions (offline) | `localStorage` | shown on the Feedback page; cleared by *Delete all app data* |
@@ -143,7 +149,7 @@ offline (that is the tested configuration).
 
 ```
 web/
-├── .env                 VITE_ADMIN_BUILD=false (user build)
+├── .env                 VITE_API_URL optional (offline by default)
 ├── index.html           meta/OG tags, favicon, deep-path → hash bootstrap
 ├── package.json         react, jspdf, mammoth, pdfjs-dist, axios, vite (no Capacitor)
 ├── vite.config.js       base './', dev :5174, preview :4174 strictPort
@@ -151,10 +157,13 @@ web/
 ├── public/
 │   ├── favicon.svg
 │   ├── robots.txt       allow-all (Lighthouse SEO)
+│   ├── user.apk         Android app served by the "Get the Android app" button
 │   └── 404.html         GitHub Pages deep-link fallback
 └── src/
-    ├── App.jsx          hash routing, sidebar, toasts, share, keyboard shortcuts
-    ├── storage.js       IndexedDB + localStorage fallback, autosave, versions, backup
+    ├── App.jsx          hash routing, login gate, sidebar, toasts, share
+    ├── auth.js          device-local accounts (PBKDF2), owner digests only
+    ├── aiBuilder.js     FREE offline AI resume drafter (no API, no invented facts)
+    ├── storage.js       IndexedDB + localStorage fallback, owner-scoped, autosave, versions, backup
     ├── api.js           backend client with fast NO_BACKEND rejection
     ├── pdfBuilder.js    Capacitor-free jsPDF export (doc.save())
     ├── resumeImport.js  PDF/DOCX/TXT parsing (pdfjs local worker + mammoth)
@@ -162,9 +171,15 @@ web/
     ├── styles.css       APK styles + web-only additions (modals, welcome, print fixes)
     └── components/
         ├── Welcome.jsx, Settings.jsx, AtsChecklist.jsx, VersionHistory.jsx   (new, web-only)
+        ├── Auth.jsx     Sign up / Log in (neutral; no admin surface anywhere)
         ├── Form.jsx, Dashboard.jsx, Preview.jsx, TemplateSelector.jsx        (adapted)
         └── ImportResume.jsx, CoverLetter.jsx, Feedback.jsx, Developer.jsx     (adapted)
 ```
+
+**Owner (admin) access:** sign in through the normal login form with the
+owner email + passcode (PBKDF2 digest of both is embedded in the bundle —
+the passcode itself is never stored in the repo; the owner keeps it
+out-of-band). The *Admin Panel* nav item appears for that session only.
 
 ## 10. TROUBLESHOOTING
 
@@ -174,4 +189,6 @@ web/
 | PDF import worker error | never load `dist/index.html` via `file://` — serve it (`npm run preview` or a host); worker is bundled relatively and verified on the production build |
 | Data “disappeared” | check Settings → storage usage; *Export backup* regularly; *Import backup* (Merge) restores |
 | Fonts not loading offline | app works regardless — Google Fonts are the only external request and fall back to system fonts |
-| Want the admin build | not supported by the web variant by design (user parity); Android keeps the admin APK |
+| "Log in required" but I have no account | accounts are free and device-local — click **Sign up** (name, email, password). A new browser/device needs its own account |
+| Owner login not unlocking Admin Panel | use the owner email + the passcode given out-of-band; wrong credentials show a neutral error by design |
+| "An account with this email already exists" on Sign up | that email is reserved/registered on this device — use **Log in** instead |

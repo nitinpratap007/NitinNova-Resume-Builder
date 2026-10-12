@@ -5,8 +5,6 @@ import ImportResume from './ImportResume'
 import VersionHistory from './VersionHistory'
 import { getProfiles, saveProfiles, deleteVersions, exportAllData, clearDraft } from '../storage'
 
-const IS_ADMIN_BUILD = import.meta.env.VITE_ADMIN_BUILD === 'true'
-
 function downloadJson(data, filename) {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
@@ -28,7 +26,8 @@ export default function Dashboard({ onLoadProfile, isAdmin, onGoAuth, onToast })
   const [showImport, setShowImport] = useState(false)
   const [historyProfile, setHistoryProfile] = useState(null)
 
-  const canAccessCloud = IS_ADMIN_BUILD && isAdmin
+  // Cloud resumes (backend) are owner-only; harmless when no backend is set.
+  const canAccessCloud = !!isAdmin
 
   useEffect(() => {
     let alive = true
@@ -288,25 +287,14 @@ export default function Dashboard({ onLoadProfile, isAdmin, onGoAuth, onToast })
 
       {tab === 'cloud' && (
         <div style={{ display: 'grid', gap: '12px' }}>
-          {!canAccessCloud && (
-            <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
-              <p style={{ fontSize: '16px', marginBottom: '8px' }}>Cloud resumes are admin-only</p>
-              <p style={{ fontSize: '13px' }}>Sign in with the admin account to access cloud-saved resumes.</p>
-              {onGoAuth && (
-                <button className="btn btn-secondary" onClick={onGoAuth} style={{ marginTop: '12px', padding: '8px 16px', fontSize: '13px' }}>
-                  Admin Login
-                </button>
-              )}
-            </div>
-          )}
           {canAccessCloud && cloudResumes.length === 0 && (
             <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
               <p style={{ fontSize: '16px', marginBottom: '8px' }}>
-                {cloudState === 'loading' ? 'Checking cloud...' : cloudState === 'auth' ? 'Admin session expired' : cloudState === 'offline' ? 'Cloud sync unavailable' : 'No cloud resumes'}
+                {cloudState === 'loading' ? 'Checking cloud...' : cloudState === 'auth' ? 'Session expired' : cloudState === 'offline' ? 'Cloud sync unavailable' : 'No cloud resumes'}
               </p>
               <p style={{ fontSize: '13px' }}>
                 {cloudState === 'auth'
-                  ? 'Your admin session has expired (tokens last 15 minutes). Please log in again.'
+                  ? 'Your session has expired (tokens last 15 minutes). Please log in again.'
                   : cloudState === 'offline'
                     ? 'The online backend is unreachable right now. Your resumes are safe in the Local tab — try again when you are online.'
                     : 'Save a resume to the cloud to access it from any device.'}
@@ -314,7 +302,7 @@ export default function Dashboard({ onLoadProfile, isAdmin, onGoAuth, onToast })
               {cloudState !== 'loading' && (
                 <button className="btn btn-secondary" onClick={cloudState === 'auth' && onGoAuth ? onGoAuth : fetchCloud}
                   style={{ marginTop: '12px', padding: '8px 16px', fontSize: '13px' }}>
-                  {cloudState === 'auth' ? 'Admin Login' : 'Retry'}
+                  {cloudState === 'auth' ? 'Log in again' : 'Retry'}
                 </button>
               )}
             </div>

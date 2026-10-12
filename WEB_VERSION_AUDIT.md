@@ -199,3 +199,62 @@ isolation guarantee; tracked here per file (§ above).
 - [x] Docs: SETUP + TEST_REPORT
 - [x] Deployment prep (`vercel.json`, `404.html`, `web-pages.yml` committed; live deploy needs hosting credentials — not available from this machine)
 - [x] Final APK hash re-verification + Android-untouched confirmation (both hashes identical to baseline; `frontend/` diff empty)
+
+---
+
+# ROUND 2 - SECURITY REMEDIATION & FEATURE ADDITIONS
+
+Triggered by the owner reporting (in Hinglish): admin details visible on
+GitHub; users must not see that an admin exists; a normal login should grant
+admin only when the owner's credentials are entered; account required to
+build resumes while exploration stays open; plus Download-APK button, remove
+the silly APK-share text, and a free offline AI that drafts a full resume.
+
+## R2.1 VULNERABILITIES FOUND (before fix)
+
+| ID | Severity | Finding |
+|----|----------|---------|
+| V1 | **Critical** | `frontend/src/Auth.jsx` + `web/src/Auth.jsx` contained `OFFLINE_ADMIN_EMAIL`/`OFFLINE_ADMIN_PASSWORD` (hard-coded) with an offline login bypass — anyone reading the public source (or the JS bundle / APK) could unlock admin. |
+| V2 | **High** | `README.md` contained a Python seed snippet with the admin email AND plaintext password; present in git history since the initial commit. |
+| V3 | Medium | Phone placeholder in both `Form.jsx` copies exposed the real phone number (which was also the old admin password). |
+| V4 | Low | `InviteFriend` share text asked users to "share the parent .apk file" (leaky/odd UX). |
+
+## R2.2 FIXES APPLIED
+
+* **V1** — offline bypass deleted; APK admin login now requires the backend
+  (`frontend/`, source-only change, APKs NOT rebuilt). Website admin is
+  device-local and verified against `SHA-256(email)` + `PBKDF2(passcode)`
+  digests shipped in `web/src/auth.js` — no plaintext anywhere.
+* **V2** — README seed snippet replaced with interactive `create_admin.py`
+  instructions + explicit "never commit credentials" warning. **Git history
+  rewritten (git filter-repo) and force-pushed** — old password/email no
+  longer exist in any commit. Backend admin password rotated afterwards.
+* **V3** — placeholder generalized (`+91 98765 43210`).
+* **V4** — share text now sends the website link only.
+* Bundle verification: scans of `web/dist` for the old password, admin email
+  and `OFFLINE_ADMIN` → 0 matches; "Admin Access"/"Admin Login" strings → 0.
+* Admin invisibility: no admin nav/strings/routes for regular users; owner
+  session is the only trigger for Admin Panel; wrong owner password and
+  squatter signups get neutral errors (tested — see TEST_REPORT R2.3).
+
+## R2.3 FEATURES ADDED (web)
+
+| Feature | Where |
+|---------|-------|
+| Device-local accounts (free, offline, PBKDF2) + login gate on all resume-touching routes | `web/src/auth.js`, `App.jsx`, rewritten `Auth.jsx` |
+| Owner-stamped resumes (per-account privacy on a shared device) + claim of pre-account data | `web/src/storage.js` |
+| **AI Draft** — offline full-resume drafter (summary, skills, bullets from user facts only; never invents) | `web/src/aiBuilder.js`, `Form.jsx` panel |
+| **Download APK** button on the welcome page (`./user.apk`, 4.2 MB, verified 200) | `Welcome.jsx`, `web/public/user.apk` |
+| Admin **Accounts** tab (list/delete device accounts) | `AdminPanel.jsx` |
+| Neutral share text (no APK mention) | `InviteFriend.jsx` (web + frontend copies) |
+
+## R2.4 ROUND 2 PLAN STATUS
+
+- [x] Remove hard-coded admin credentials from both frontends
+- [x] Scrub README + rotate backend admin password
+- [x] Purge secrets from git history + force-push
+- [x] Free device-local account system with login gate (explore open, build requires account)
+- [x] Single login form; owner credentials unlock admin; admin invisible to everyone else
+- [x] Offline AI full-resume drafting (no API, no invented content)
+- [x] Download-APK button + fixed invite/share text
+- [x] Full browser re-test on the production build (15/15 scenarios, zero app console errors)

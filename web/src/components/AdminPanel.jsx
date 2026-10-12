@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import API from '../api'
+import { listUsers, deleteDeviceUser } from '../auth'
 
 const CUSTOM_SECTIONS_KEY = 'nitinnova_admin_sections'
 const LOCAL_FEEDBACK_KEY = 'nitinnova_local_feedbacks'
@@ -15,6 +16,7 @@ function loadDeletedIds() {
 
 export default function AdminPanel() {
   const [users, setUsers] = useState([])
+  const [accounts, setAccounts] = useState([])
   const [feedbacks, setFeedbacks] = useState([])
   const [customSections, setCustomSections] = useState([])
   const [newSection, setNewSection] = useState('')
@@ -32,6 +34,9 @@ export default function AdminPanel() {
   useEffect(() => { loadData() }, [])
 
   async function loadData() {
+    // Device-local accounts (auth.js) — no server needed
+    try { setAccounts(await listUsers()) } catch {}
+
     try {
       const sec = localStorage.getItem(CUSTOM_SECTIONS_KEY)
       setCustomSections(sec ? JSON.parse(sec) : ['Education', 'Skills', 'Projects & Experience'])
@@ -96,6 +101,12 @@ export default function AdminPanel() {
     setFeedbacks(prev => prev.filter(f => f.id !== id))
   }
 
+  async function removeAccount(email) {
+    if (!window.confirm(`Delete the account "${email}" from this device? Their saved resumes stay on the device but will no longer be accessible.`)) return
+    await deleteDeviceUser(email)
+    setAccounts(prev => prev.filter(a => a.email !== email))
+  }
+
   function addAppSection() {
     if (!newSection.trim()) return
     const updated = [...customSections, newSection.trim()]
@@ -146,6 +157,10 @@ export default function AdminPanel() {
         <button className={`btn ${activeTab === 'settings' ? 'btn-primary' : 'btn-secondary'}`}
           onClick={() => setActiveTab('settings')} style={{ padding: '8px 14px', fontSize: '13px' }}>
           Settings
+        </button>
+        <button className={`btn ${activeTab === 'accounts' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => setActiveTab('accounts')} style={{ padding: '8px 14px', fontSize: '13px' }}>
+          Accounts ({accounts.length})
         </button>
       </div>
 
@@ -229,6 +244,38 @@ export default function AdminPanel() {
               {saving ? 'Saving...' : 'Save Settings'}
             </button>
           </div>
+        </div>
+      )}
+
+      {activeTab === 'accounts' && (
+        <div>
+          <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '16px' }}>
+            Accounts created on this device. Deleting one removes its login;
+            resumes saved by that account stay in this browser's storage.
+          </p>
+          {accounts.length === 0 ? (
+            <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '20px' }}>No user accounts on this device yet.</p>
+          ) : (
+            <div style={{ display: 'grid', gap: '10px' }}>
+              {accounts.map(a => (
+                <div key={a.email} style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px',
+                  padding: '12px 16px', background: 'rgba(255,255,255,0.02)',
+                  border: '1px solid var(--border-color)', borderRadius: '12px', flexWrap: 'wrap'
+                }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>{a.name}</div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.email}</div>
+                  </div>
+                  <button onClick={() => removeAccount(a.email)}
+                    style={{ background: 'rgba(239,68,68,0.05)', color: '#fca5a5', border: 'none',
+                      padding: '6px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '12px' }}>
+                    Delete
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

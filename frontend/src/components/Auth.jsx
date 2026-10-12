@@ -5,13 +5,12 @@ import API from '../api'
 // The resume builder itself is fully offline-first and needs NO account.
 // This screen exists solely so the admin can unlock the Cloud tab and the
 // Admin Panel with a real backend JWT (issued by POST /auth/login).
-// Falls back to offline verification when backend is unreachable.
+// SECURITY: credentials are verified ONLY by the backend. An earlier "offline
+// fallback" compared a hard-coded password inside the app bundle — anyone
+// could read it from the source/APK and unlock admin access. It has been
+// removed; admin login now requires the backend to be reachable.
 
 const CURRENT_USER_KEY = 'nitinnova_current_user'
-
-// Offline admin credentials (matches backend admin: REMOVED)
-const OFFLINE_ADMIN_EMAIL = 'you@example.com'
-const OFFLINE_ADMIN_PASSWORD = ''
 
 export default function Auth({ onAuth }) {
   const [form, setForm] = useState({ email: '', password: '' })
@@ -32,7 +31,6 @@ export default function Auth({ onAuth }) {
       return
     }
     setLoading(true)
-    let online = false
     try {
       const res = await API.post('/auth/login', { email: form.email, password: form.password })
       const data = res.data
@@ -45,32 +43,15 @@ export default function Auth({ onAuth }) {
       localStorage.setItem('is_admin', data.is_admin ? '1' : '0')
       localStorage.setItem(CURRENT_USER_KEY, JSON.stringify({ email: form.email, role: data.is_admin ? 'admin' : 'user' }))
       onAuth({ token: data.token, is_admin: !!data.is_admin })
-      online = true
     } catch (err) {
       const status = err && err.response && err.response.status
       if (status === 401 || status === 403) {
         setError('Invalid admin credentials.')
-        return
-      }
-      // Network error — try offline verification
-      if (form.email === OFFLINE_ADMIN_EMAIL && form.password === OFFLINE_ADMIN_PASSWORD) {
-        const offlineToken = 'offline_admin_' + Date.now()
-        localStorage.setItem('token', offlineToken)
-        localStorage.setItem('is_admin', '1')
-        localStorage.setItem(CURRENT_USER_KEY, JSON.stringify({ email: form.email, role: 'admin' }))
-        onAuth({ token: offlineToken, is_admin: true })
-        online = false
       } else {
-        setError('Invalid admin credentials.')
-        return
+        setError('Cannot reach the server. Check your connection and try again.')
       }
     } finally {
       setLoading(false)
-    }
-    if (!online) {
-      // Show a subtle notice that we're in offline mode
-      setError('⚠️ Offline mode — Cloud sync unavailable. Admin Panel works locally.')
-      setTimeout(() => setError(''), 5000)
     }
   }
 

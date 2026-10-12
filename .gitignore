@@ -20,3 +20,5 @@ android-tooling/
 
 test_resume.txt
 *.apk
+# The website offers the Android app for download — host the user variant only.
+!web/public/user.apk

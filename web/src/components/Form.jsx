@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { polishBullets, organizeSkills } from '../localAI'
+import { draftResume } from '../aiBuilder'
 import { normalizeResumeData } from '../resumeNormalize'
 import TemplateSelector from './TemplateSelector'
 import { templateSets, fontOptions, fontSizePresets, defaultSkillCategories, defaultSections } from '../templateData'
@@ -46,6 +47,12 @@ export default function Form({ onPolished, onSaved, onSavePdf, initialData }) {
   // effect from overwriting the stored draft with the empty initial form
   // (StrictMode double-invokes effects, which made drafts never load)
   const [hydrated, setHydrated] = useState(false)
+
+  // ---- AI draft panel (web-only, FREE & offline — see aiBuilder.js) ----
+  const [aiOpen, setAiOpen] = useState(false)
+  const [aiBusy, setAiBusy] = useState(false)
+  const [aiError, setAiError] = useState('')
+  const [aiForm, setAiForm] = useState({ jobTitle: '', years: '', skills: '', highlights: '', education: '' })
 
   // Autosave status feed (IndexedDB storage layer)
   useEffect(() => onDraftStatus((status, at) => setSaveStatus({ status, at })), [])
@@ -304,6 +311,42 @@ export default function Form({ onPolished, onSaved, onSavePdf, initialData }) {
     setStatusMessage('Formatted offline.')
   }
 
+  // AI Draft — fills the form from the basics the user typed. Runs 100%
+  // locally (aiBuilder.js): free, offline, and it never invents facts.
+  async function runAiDraft(e) {
+    if (e) e.preventDefault()
+    setAiError('')
+    if (!aiForm.jobTitle.trim()) {
+      setAiError('Tell us the role you are targeting (e.g. "Frontend Developer").')
+      return
+    }
+    const hasContent = String(form.summary || '').trim() || String(form.projects || '').trim()
+    if (hasContent && !window.confirm('This will replace your summary and experience lines with the AI draft. Continue?')) {
+      return
+    }
+    setAiBusy(true)
+    try {
+      // yield a frame so the button shows its busy state before the (fast) local run
+      await new Promise(r => setTimeout(r, 30))
+      const d = draftResume(aiForm)
+      setForm(prev => ({
+        ...prev,
+        headline: prev.headline || d.headline,
+        summary: d.summary,
+        skills: d.skills,
+        skillGroups: organizeSkills(d.skills, defaultSkillCategories),
+        projects: d.projects,
+        education: prev.education || aiForm.education || '',
+      }))
+      setActiveTab('personal')
+      if (onToast) onToast('Draft generated — review every line, then download your PDF.')
+    } catch (err) {
+      setAiError((err && err.message) || 'Could not generate a draft.')
+    } finally {
+      setAiBusy(false)
+    }
+  }
+
   async function save(e) {
     if (e) e.preventDefault()
     setStatusMessage('Saving\u2026')
@@ -373,7 +416,67 @@ export default function Form({ onPolished, onSaved, onSavePdf, initialData }) {
           onClick={() => setActiveTab('sections')}>Sections
           <span className="tab-badge" data-tone={tabInfo.sectionsTone}>{tabInfo.sections}</span>
         </button>
+        <button type="button" className={`tab-btn ai-tab-btn ${aiOpen ? 'active' : ''}`}
+          onClick={() => setAiOpen(o => !o)} aria-expanded={aiOpen}>
+          ✨ AI Draft
+        </button>
       </div>
+
+      {aiOpen && (
+        <form className="animate-fade-in ai-draft-panel" onSubmit={runAiDraft}
+          style={{ display: 'grid', gap: '12px', marginBottom: '18px', padding: '16px',
+            border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md, 12px)',
+            background: 'rgba(99,102,241,0.05)' }}>
+          <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-muted)' }}>
+            Tell the AI about yourself — it drafts your summary, skills and experience bullets instantly.
+            Runs entirely on this device: free, offline, and it never invents facts you didn't type.
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '12px' }}>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label>Target role *</label>
+              <input value={aiForm.jobTitle} onChange={e => { setAiForm({ ...aiForm, jobTitle: e.target.value }); setAiError('') }}
+                placeholder="e.g. Frontend Developer" />
+            </div>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label>Years of experience</label>
+              <input type="number" min="0" max="50" value={aiForm.years}
+                onChange={e => setAiForm({ ...aiForm, years: e.target.value })}
+                placeholder="e.g. 2" />
+            </div>
+          </div>
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label>Your skills</label>
+            <textarea rows={2} value={aiForm.skills}
+              onChange={e => setAiForm({ ...aiForm, skills: e.target.value })}
+              placeholder={"React, JavaScript, CSS\nPython, Flask, SQL"} className="wide-textarea" />
+          </div>
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label>What you have worked on (one per line)</label>
+            <textarea rows={3} value={aiForm.highlights}
+              onChange={e => setAiForm({ ...aiForm, highlights: e.target.value })}
+              placeholder={"built a resume builder with React and Flask\nautomated the Android APK release pipeline"}
+              className="wide-textarea" />
+          </div>
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label>Education</label>
+            <input value={aiForm.education}
+              onChange={e => setAiForm({ ...aiForm, education: e.target.value })}
+              placeholder="e.g. B.Tech Computer Science" />
+          </div>
+          {aiError && (
+            <div role="alert" style={{ padding: '8px 12px', fontSize: '13px', color: '#fca5a5',
+              background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px' }}>
+              {aiError}
+            </div>
+          )}
+          <div>
+            <button type="submit" className="btn btn-primary" disabled={aiBusy}
+              style={{ padding: '10px 20px' }}>
+              {aiBusy ? 'Drafting…' : '✨ Generate my resume draft'}
+            </button>
+          </div>
+        </form>
+      )}
 
       {activeTab === 'design' && (
         <div className="animate-fade-in" style={{ display: 'grid', gap: '16px' }}>
@@ -443,7 +546,7 @@ export default function Form({ onPolished, onSaved, onSavePdf, initialData }) {
             <div className="form-group"><label>Email</label>
               <input name="email" type="email" placeholder="e.g. nitin@gmail.com" value={form.email} onChange={change} /></div>
             <div className="form-group"><label>Phone</label>
-              <input name="phone" placeholder="e.g. +91 0000000000" value={form.phone} onChange={change} /></div>
+              <input name="phone" placeholder="e.g. +91 98765 43210" value={form.phone} onChange={change} /></div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' }}>
             <div className="form-group"><label>GitHub</label>

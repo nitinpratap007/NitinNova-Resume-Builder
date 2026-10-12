@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { API_CONFIGURED } from '../api'
+import { getSession } from '../auth'
 import {
   exportAllData, importAllData, estimateUsage, clearAllAppData, STORAGE_BACKEND_LABEL,
 } from '../storage'
@@ -37,6 +38,7 @@ function readFileText(file) {
 
 // WEB-VERSION-ONLY settings & privacy page.
 export default function Settings({ onToast }) {
+  const session = getSession()
   const [usage, setUsage] = useState({ usage: 0, quota: 0, backend: STORAGE_BACKEND_LABEL() })
   const [status, setStatus] = useState('')
   const [busy, setBusy] = useState(false)
@@ -114,8 +116,13 @@ export default function Settings({ onToast }) {
       <section className="glass-card">
         <h2 style={{ margin: '0 0 4px', fontSize: '22px' }}>Settings &amp; Privacy</h2>
         <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '14px' }}>
-          Everything here runs locally in your browser. No account required.
+          Everything runs locally in your browser. Your free account lives only on this device.
         </p>
+        {session && (
+          <p style={{ margin: '10px 0 0', fontSize: '13px', color: 'var(--text-secondary)' }}>
+            Signed in as <strong>{session.email}</strong>
+          </p>
+        )}
       </section>
 
       <section className="glass-card">
