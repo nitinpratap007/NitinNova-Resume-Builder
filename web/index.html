@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#090d16" />
+    <meta name="description" content="NitinNova Web — build professional resumes in your browser. Live preview, PDF download, resume import (PDF/DOCX/TXT). Your data stays on your device." />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <meta property="og:title" content="NitinNova Resume Builder (Web)" />
+    <meta property="og:description" content="Build, import and download professional resumes — entirely in your browser." />
+    <meta property="og:type" content="website" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <title>NitinNova Resume Builder — Web</title>
+    <style>
+      body { margin: 0; background: #090d16; }
+      #root { min-height: 100vh; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      // Deep-path → hash-route bootstrap for SPA hosting fallbacks, e.g.
+      // Vercel rewrite serving index.html at /dashboard → becomes #/dashboard.
+      // No-op on normal loads (already has a hash, or is the site root).
+      (function () {
+        if (location.hash) return
+        var known = ['welcome', 'home', 'dashboard', 'cover-letter', 'settings', 'feedback', 'developer']
+        var segs = location.pathname.split('/').filter(Boolean)
+        var last = (segs[segs.length - 1] || '').replace(/\.html$/, '')
+        if (last && known.indexOf(last) !== -1) {
+          var base = location.pathname.replace(/\/[^/]*\/?$/, '/')
+          history.replaceState(null, '', base + '#/' + last)
+        }
+      })()
+    </script>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

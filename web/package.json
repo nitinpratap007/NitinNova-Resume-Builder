@@ -1,0 +1,23 @@
+{
+  "name": "nitinnova-web",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "NitinNova Resume Builder — standalone browser (web) version. Isolated from the Android APK project in frontend/.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --port 4174 --strictPort"
+  },
+  "dependencies": {
+    "axios": "^1.4.0",
+    "jspdf": "^2.5.1",
+    "mammoth": "^1.13.0",
+    "pdfjs-dist": "^6.4.299",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0"
+  }
+}
