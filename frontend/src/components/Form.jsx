@@ -8,7 +8,7 @@ import API from '../api'
 const DRAFT_KEY = 'resume_builder_draft'
 const PROFILES_KEY = 'nitinnova_resume_profiles'
 
-export default function Form({ onPolished, onSaved, onSavePdf, initialData }) {
+export default function Form({ onPolished, onSaved, initialData }) {
   const [form, setForm] = useState({
     name: '', headline: '', location: '', summary: '',
     email: '', phone: '', education: '', skills: '', projects: '',
@@ -225,7 +225,6 @@ export default function Form({ onPolished, onSaved, onSavePdf, initialData }) {
     const existing = JSON.parse(localStorage.getItem(PROFILES_KEY) || '[]')
     localStorage.setItem(PROFILES_KEY, JSON.stringify([profile, ...existing.filter(p => p.name !== profile.name)].slice(0, 30)))
     setStatusMessage(`Profile "${profile.name}" saved.`)
-    if (onSavePdf) onSavePdf()
   }
 
   async function generate(e) {
@@ -258,7 +257,6 @@ export default function Form({ onPolished, onSaved, onSavePdf, initialData }) {
     const existing = JSON.parse(localStorage.getItem(PROFILES_KEY) || '[]')
     localStorage.setItem(PROFILES_KEY, JSON.stringify([profile, ...existing].slice(0, 30)))
     setStatusMessage('Saved locally.')
-    if (onSavePdf) onSavePdf()
   }
 
   return (

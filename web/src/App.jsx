@@ -58,7 +58,6 @@ export default function App() {
   const [route, setRoute] = useState(routeFromHash)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [profileToLoad, setProfileToLoad] = useState(null)
-  const [saveTrigger, setSaveTrigger] = useState(0)
   const [toast, setToast] = useState('')
   // Device-local session (auth.js). null = signed out (can still explore).
   const [session, setSession] = useState(getSession)
@@ -305,13 +304,12 @@ export default function App() {
                 <Form
                   onPolished={(p) => setPolished(p)}
                   onSaved={(id) => setSavedId(id)}
-                  onSavePdf={() => setSaveTrigger(n => n + 1)}
                   initialData={profileToLoad}
                   onToast={showToast}
                 />
               </div>
               <div style={{ position: 'sticky', top: '40px', alignSelf: 'start' }}>
-                <Preview polished={polished} savedId={savedId} saveTrigger={saveTrigger} onToast={showToast} />
+                <Preview polished={polished} savedId={savedId} onToast={showToast} />
               </div>
             </div>
           )}

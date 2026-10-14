@@ -47,7 +47,6 @@ export default function App() {
   const [route, setRoute] = useState('home')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [profileToLoad, setProfileToLoad] = useState(null)
-  const [saveTrigger, setSaveTrigger] = useState(0)
   const [appSettings, setAppSettings] = useState({
     appName: 'NitinNova',
     appTagline: 'CareerCraft by Nitin Pratap',
@@ -231,12 +230,11 @@ export default function App() {
                 <Form
                   onPolished={(p) => setPolished(p)}
                   onSaved={(id) => setSavedId(id)}
-                  onSavePdf={() => setSaveTrigger(n => n + 1)}
                   initialData={profileToLoad}
                 />
               </div>
               <div style={{ position: 'sticky', top: '40px', alignSelf: 'start' }}>
-                <Preview polished={polished} savedId={savedId} saveTrigger={saveTrigger} />
+                <Preview polished={polished} savedId={savedId} />
               </div>
             </div>
           )}

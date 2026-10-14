@@ -3,23 +3,17 @@ import { buildResumeLayout, PAGE_W } from '../resumeLayout'
 import { exportResumePdf } from '../pdfBuilder'
 import AtsChecklist from './AtsChecklist'
 
-export default function Preview({ polished, savedId, saveTrigger, onToast }) {
+export default function Preview({ polished, savedId, onToast }) {
   const [saving, setSaving] = useState(false)
   const [status, setStatus] = useState('')
   const [showAts, setShowAts] = useState(false)
   const previewRef = useRef(null)
   const busyRef = useRef(false)
 
-  useEffect(() => {
-    if (saveTrigger > 0 && polished && !busyRef.current) {
-      busyRef.current = true
-      setSaving(true)
-      exportResumePdf(polished, savedId)
-        .then(r => setStatus(r.message))
-        .finally(() => { setSaving(false); busyRef.current = false })
-    }
-  }, [saveTrigger])
-
+  // NOTE: PDF export happens ONLY here — via the Download PDF button or
+  // Ctrl/Cmd+D below. Saving or reopening the builder must never trigger a
+  // download (the old saveTrigger effect did both, auto-downloading the PDF
+  // on every builder open — removed by owner request).
   const exportPDF = useCallback(async () => {
     // Re-entry guard: double clicks / stacked triggers never run a second
     // export while one is in flight (prevents duplicate/corrupted files).

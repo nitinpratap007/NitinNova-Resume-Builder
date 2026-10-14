@@ -7,7 +7,7 @@ import { templateSets, fontOptions, fontSizePresets, defaultSkillCategories, def
 import API from '../api'
 import { getDraft, queueDraftSave, onDraftStatus, getProfiles, saveProfiles, pushVersion } from '../storage'
 
-export default function Form({ onPolished, onSaved, onSavePdf, initialData }) {
+export default function Form({ onPolished, onSaved, initialData }) {
   const [form, setForm] = useState({
     name: '', headline: '', location: '', summary: '',
     email: '', phone: '', education: '', skills: '', projects: '',
@@ -284,7 +284,6 @@ export default function Form({ onPolished, onSaved, onSavePdf, initialData }) {
     } catch (e) {
       setStatusMessage('Save failed: ' + (e && e.message ? e.message : 'storage unavailable'))
     }
-    if (onSavePdf) onSavePdf()
   }
 
   async function generate(e) {
@@ -369,7 +368,6 @@ export default function Form({ onPolished, onSaved, onSavePdf, initialData }) {
     } catch (err) {
       setStatusMessage('Save failed: ' + (err && err.message ? err.message : 'storage unavailable'))
     }
-    if (onSavePdf) onSavePdf()
   }
 
   // Section completeness indicators (web-only): cheap counts shown as tab badges

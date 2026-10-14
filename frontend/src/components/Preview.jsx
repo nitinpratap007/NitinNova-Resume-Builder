@@ -2,22 +2,15 @@ import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { buildResumeLayout, PAGE_W } from '../resumeLayout'
 import { exportResumePdf } from '../pdfBuilder'
 
-export default function Preview({ polished, savedId, saveTrigger }) {
+export default function Preview({ polished, savedId }) {
   const [saving, setSaving] = useState(false)
   const [status, setStatus] = useState('')
   const previewRef = useRef(null)
   const busyRef = useRef(false)
 
-  useEffect(() => {
-    if (saveTrigger > 0 && polished && !busyRef.current) {
-      busyRef.current = true
-      setSaving(true)
-      exportResumePdf(polished, savedId)
-        .then(r => setStatus(r.message))
-        .finally(() => { setSaving(false); busyRef.current = false })
-    }
-  }, [saveTrigger])
-
+  // NOTE: PDF export happens ONLY via the Download PDF button / Ctrl+D below.
+  // Saving or reopening the builder must never auto-download (the old
+  // saveTrigger effect did — removed by owner request).
   const exportPDF = useCallback(async () => {
     // Re-entry guard: double clicks / stacked triggers never run a second
     // export while one is in flight (prevents duplicate/corrupted files).
