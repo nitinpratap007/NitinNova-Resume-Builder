@@ -227,8 +227,12 @@ the silly APK-share text, and a free offline AI that drafts a full resume.
   digests shipped in `web/src/auth.js` — no plaintext anywhere.
 * **V2** — README seed snippet replaced with interactive `create_admin.py`
   instructions + explicit "never commit credentials" warning. **Git history
-  rewritten (git filter-repo) and force-pushed** — old password/email no
-  longer exist in any commit. Backend admin password rotated afterwards.
+  rewritten (git filter-repo, two passes + a commit-message rewrite) and
+  force-pushed** — the old password, its bare digits in every historical
+  context, the admin email and the seed snippet no longer exist in any
+  commit (verified on a fresh clone of the remote: 0 matches in all blobs
+  and all commit messages). Backend admin rows aligned to the owner-chosen
+  email + passcode afterwards (owner-approved).
 * **V3** — placeholder generalized (`+91 98765 43210`).
 * **V4** — share text now sends the website link only.
 * Bundle verification: scans of `web/dist` for the old password, admin email

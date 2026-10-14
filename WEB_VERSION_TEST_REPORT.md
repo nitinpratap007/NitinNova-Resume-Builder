@@ -236,9 +236,9 @@ Device-local accounts (`web/src/auth.js`):
 | S1 | `frontend/src/Auth.jsx` offline-admin bypass removed (hard-coded email+password granted admin without any server) | source grep: 0 matches for `OFFLINE_ADMIN`/old password in `frontend/` and `web/` |
 | S2 | Admin seed snippet with plaintext password removed from `README.md` (replaced with `create_admin.py` instructions + security notes) | README diff; git history purge performed afterwards (see R2.5) |
 | S3 | Website owner login uses digests only - bundle scan for old credentials: **CLEAN**; scan for "Admin Access"/"Admin Login" strings: **0 matches** |
-| S4 | Backend admin password rotated (old one was public on GitHub); new strong passcode set in `backend/resumes.db` (scrypt hash) | DB read-back shows new hash prefix |
+| S4 | Backend admin password set to the owner-chosen passcode (the old one was public on GitHub) for both owner emails in `backend/resumes.db` (scrypt hash); owner email promoted to `is_admin=1` | DB read-back + `check_password_hash` verification |
 | S5 | Phone placeholder in both Form.jsx copies changed from the real phone number (which was also the old password) to a generic example |
-| S6 | Git history purge: password, admin email and seed snippet removed from ALL old commits + force-push (all commit IDs changed) | `git log -S` / `git grep` across rewritten history: 0 matches |
+| S6 | Git history purge: password (including the bare digits in every old context), admin email, seed snippet AND the commit message that named the password removed from ALL old commits + force-push (all commit IDs changed) | fresh clone of the pushed remote: `git grep` across every commit + `git log` messages: **0 matches** |
 
 ## R2.3 FEATURE TESTS - 15/15 PASS (production build, http://localhost:4174)
 
@@ -275,11 +275,16 @@ console errors observed are Electron-harness internals, not app errors).
 
 ## R2.5 OPERATIONS PERFORMED (owner-approved)
 
-* Git history rewritten with `git filter-repo` (literals: old password,
-  admin email, seed-snippet lines) + force-push. All commit IDs changed;
-  docs that referenced old hashes were re-checked.
-* Backend admin password rotated; new passcode communicated to the owner
-  out-of-band (it is NOT stored anywhere in the repository).
+* Git history rewritten twice with `git filter-repo` (old password contexts,
+  admin email, seed-snippet lines, and finally every historical occurrence of
+  the password digits) plus `git filter-branch --msg-filter` for the one
+  commit message that named the password. Force-pushed; all commit IDs
+  changed. Verified by cloning the pushed remote fresh and scanning every
+  blob + every commit message: 0 matches.
+* Owner (admin) credentials: the owner chose their own email + passcode and
+  these are shipped as digests only (SHA-256 email + PBKDF2 passcode in
+  `web/src/auth.js`); the passcode itself is NOT stored anywhere in the
+  repository, source, or built bundle (verified by scanning `web/dist`).
 
 ## R2.6 LIMITATIONS (honest)
 
@@ -290,3 +295,25 @@ console errors observed are Electron-harness internals, not app errors).
   they remain owner-stamped and inaccessible without that login.
 * PBKDF2 at 310k iterations takes ~0.5-1 s per login on slow devices (by
   design; security over speed).
+
+
+## R2.7 CREDENTIAL SWAP RE-TEST (owner-chosen email + passcode)
+
+At the owner's request the admin login was changed to the owner's OWN email
+and passcode (entered in the normal user login form - no separate admin form
+exists anywhere). Re-verified on the production build after rebuilding:
+
+| # | Scenario | Result |
+|---|----------|--------|
+| 1 | Owner email + owner passcode in the normal login -> admin session, Admin Panel nav appears | PASS |
+| 2 | Admin Panel renders (Feedback / Sections / Settings / Accounts tabs) | PASS |
+| 3 | Owner email + wrong password -> neutral "Incorrect password. Please try again." (no admin hint), no session | PASS |
+| 4 | Unknown email -> neutral "No account found with this email." (no admin mention) | PASS |
+| 5 | Fresh regular-user signup -> role "user", no Admin Panel nav, 0 occurrences of "admin" on the page | PASS |
+| 6 | Regular user deep-links to `#/admin` -> redirected away (admin never accessible) | PASS |
+| 7 | Bundle scan after rebuild: plaintext password 0 matches, "Admin Access"/"Admin Login" 0 matches, owner digest salt present | PASS |
+| 8 | Backend DB: owner email is `is_admin=1` and verifies with the owner passcode; test user does not | PASS |
+| 9 | Fresh clone of the pushed remote: password digits / admin email / seed lines absent from every blob AND commit message | PASS |
+
+0 application console errors during the re-test; test storage cleared back to
+a first-run state afterwards.
