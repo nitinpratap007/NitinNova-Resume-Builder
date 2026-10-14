@@ -4,7 +4,10 @@ import axios from 'axios'
 // every call fails fast with a recognizable NO_BACKEND error instead of firing
 // doomed requests at a static host — callers already fall back to local
 // behaviour (offline polish, local storage, local feedback) in their catch blocks.
-export const API_CONFIGURED = Boolean(import.meta.env && import.meta.env.VITE_API_URL)
+// NOTE: member access ONLY — a bare `import.meta.env` reference makes Vite
+// inline the entire env object (which on Vercel includes VITE_VERCEL_* build
+// metadata) into the public bundle. Never write `import.meta.env && ...` here.
+export const API_CONFIGURED = Boolean(import.meta.env.VITE_API_URL)
 
 const API = axios.create({
   baseURL: API_CONFIGURED ? import.meta.env.VITE_API_URL : '',
