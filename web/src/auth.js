@@ -10,7 +10,7 @@
 //   * The owner's account is verified against digests shipped in the bundle —
 //     the bundle contains NO password and NO plain-text email, only:
 //         - SHA-256 of the owner's email
-//         - PBKDF2 hash + salt of a long random passcode
+//         - PBKDF2 hash + salt of the owner passcode (kept out-of-band)
 //       Both are stored in exactly the same shape as a normal user record, so
 //       nothing in this file (or the compiled bundle) reveals that an admin
 //       account exists. Regular users get a standard "wrong email or
@@ -29,8 +29,8 @@ const MIN_PASSWORD = 8
 const OWNER_EMAIL_SHA256 = '5b21af04d85969951094fb53efd01b0c41fde97bc9a3636b4934903281e9bed2'
 // PBKDF2-SHA256 (310k) of the owner passcode, with its salt.
 const OWNER_PASSWORD = {
-  salt: 'CgFhCMpGE4ym5mAmWt93tw==',
-  hash: 'hfKyS0seWP/RfJApaIroJkQnirynn85luzXrg3etnzE=',
+  salt: 'PJsxqLddEX4wMJ7EvRB4/g==',
+  hash: '6HDK98vCBOXrjPqGiNwibjichV5QpSIXKa7LRS5HzU0=',
 }
 
 // ---- small crypto helpers ----------------------------------------------------
