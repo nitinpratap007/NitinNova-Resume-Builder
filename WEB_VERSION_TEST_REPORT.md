@@ -317,3 +317,37 @@ exists anywhere). Re-verified on the production build after rebuilding:
 
 0 application console errors during the re-test; test storage cleared back to
 a first-run state afterwards.
+
+## R2.8 AUTO-DOWNLOAD BUG FIX (download only on explicit click)
+
+Owner-reported bug: opening the Resume Builder to edit caused the resume PDF
+to download automatically, and every Save also downloaded a file. Download
+must happen ONLY when the user clicks the download option.
+
+Root cause: `Preview.jsx` exported the PDF from a `saveTrigger` effect that
+fired on every trigger change AND again on every component remount - since
+`saveTrigger` was app-level state, reopening the builder remounted Preview
+with a stale `> 0` value and auto-downloaded the PDF.
+
+Fix (commits `c186ce7`, `9dc088d`): removed the whole `onSavePdf` /
+`saveTrigger` chain from `App.jsx`, `Form.jsx` and `Preview.jsx` (web and
+frontend source, APK not rebuilt). Save / Ctrl+S now only saves locally;
+the PDF is produced exclusively by the **Download PDF** button and Ctrl/Cmd+D.
+Also stripped Vercel's auto-injected `VITE_VERCEL_*` build metadata from the
+client bundle (it was inlined via a bare `import.meta.env` reference in
+`api.js`; `VITE_API_URL` behaviour unchanged).
+
+Bug reproduced BEFORE the fix on `localhost:4174`: Save click -> 1 PDF
+downloaded; navigating away and back -> another PDF with no click.
+
+Verified AFTER the fix on production (`https://freeresume-khaki.vercel.app/`):
+
+| # | Scenario | Result |
+|---|----------|--------|
+| 1 | Sign up + open Resume Builder -> no auto-download (count unchanged) | PASS |
+| 2 | Click Save -> "Saved locally." status, no download | PASS |
+| 3 | Navigate to #/feedback and back -> no download | PASS |
+| 4 | Click Download PDF -> exactly one `NitinNova_Resume.pdf`, "PDF downloaded!" | PASS |
+| 5 | Live bundle scan: `saveTrigger` 0 matches, `VITE_VERCEL_*` 0 matches, commit message not inlined, plaintext password 0, owner salt present | PASS |
+| 6 | Local env simulation: fake `VITE_VERCEL_*` vars absent from dist while `VITE_API_URL` still inlined | PASS |
+| 7 | 0 application console errors on the live site | PASS |
